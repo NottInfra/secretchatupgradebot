@@ -48,7 +48,7 @@ export class Database {
   }
 
   private inferRegionFromHost(host: string): string | null {
-    const match = host.match(/\.([a-z]{2}-[a-z]+-\d)\.rds\.amazonaws\.com$/);
+    const match = /\.([a-z]{2}-[a-z]+-\d)\.rds\.amazonaws\.com$/.exec(host);
     return match?.[1] ?? null;
   }
 

@@ -41,7 +41,7 @@ export class MgmtBotService {
       this.logger.info("mgmt_bot_identity_ok", { username: me.username, id: me.id });
       // Detach from startup span context — polling callbacks must not share one trace.
       context.with(ROOT_CONTEXT, () => {
-        void bot
+        bot
           .launch({ allowedUpdates: MGMT_BOT_ALLOWED_UPDATES })
           .then(() => {
             this.logger.info("mgmt_bot_started");

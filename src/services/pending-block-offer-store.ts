@@ -45,7 +45,7 @@ export class PendingBlockOfferStore {
   consume(token: string, ownerUserId: string): PendingBlockOffer | undefined {
     this.pruneExpired();
     const offer = this.offers.get(token);
-    if (!offer || offer.ownerUserId !== ownerUserId) return undefined;
+    if (offer?.ownerUserId !== ownerUserId) return undefined;
     this.offers.delete(token);
     return offer;
   }

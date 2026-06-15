@@ -54,7 +54,16 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>;
 
-export let env: Env;
+let envCache: Env | undefined;
+
+export const env: Env = new Proxy({} as Env, {
+  get(_target, prop: string | symbol) {
+    if (envCache === undefined) {
+      throw new Error("env not initialized — call initEnv() first");
+    }
+    return envCache[prop as keyof Env];
+  }
+});
 
 function normalizeNodeEnv(raw: string | undefined): NodeEnv {
   const v = (raw?.trim() || "development").toLowerCase();
@@ -120,7 +129,7 @@ function loadFromEnvFile(nodeEnv: NodeEnv): void {
 }
 
 export async function initEnv(): Promise<Env> {
-  if (env) return env;
+  if (envCache) return envCache;
 
   const nodeEnv = normalizeNodeEnv(process.env.NODE_ENV);
   process.env.NODE_ENV = nodeEnv;
@@ -142,6 +151,6 @@ export async function initEnv(): Promise<Env> {
     }
   }
 
-  env = schema.parse(process.env);
-  return env;
+  envCache = schema.parse(process.env);
+  return envCache;
 }

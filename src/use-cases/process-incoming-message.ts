@@ -25,6 +25,24 @@ const LEVEL1_WARNING_EXPERIMENT_ID = "level1_message_warning";
 const LEVEL2_WARNING_FINAL_EXPERIMENT_ID = "level2_message_warning_final";
 const LEVEL3_BLOCK_EXPERIMENT_ID = "level3_messages_block";
 
+type ModerationTier = "first_warning" | "second_warning" | "block";
+
+function moderationTierForCount(count: number): ModerationTier {
+  if (count === 1) return "first_warning";
+  if (count === 2) return "second_warning";
+  return "block";
+}
+
+function decisionForTier(tier: ModerationTier): ModerationDecision {
+  if (tier === "block") {
+    return { action: "block", confidence: 1, reason: "third_or_later_message_auto_block" };
+  }
+  if (tier === "second_warning") {
+    return { action: "allow", confidence: 1, reason: "second_message_warning_sent" };
+  }
+  return { action: "allow", confidence: 1, reason: "first_message_reply_sent" };
+}
+
 export class ProcessIncomingMessageUseCase {
   private readonly sessionUsernameByClient = new WeakMap<TelegramClient, string>();
 
@@ -145,8 +163,7 @@ export class ProcessIncomingMessageUseCase {
       this.messages.countBySender(message.senderId, message.sessionId)
     );
 
-    const tier: "first_warning" | "second_warning" | "block" =
-      count === 1 ? "first_warning" : count === 2 ? "second_warning" : "block";
+    const tier = moderationTierForCount(count);
 
     this.logger.info("moderation_tier_selected", {
       senderId: message.senderId,
@@ -158,19 +175,10 @@ export class ProcessIncomingMessageUseCase {
 
     const tierAssignment = await withSpan(moderationTracer, "moderation.assign_tier", async (tierSpan) => {
       setSpanAttributes(tierSpan, { "moderation.tier": tier });
-      return tier === "first_warning"
-        ? this.experiments.assignModerationTier(LEVEL1_WARNING_EXPERIMENT_ID, message.senderId)
-        : tier === "second_warning"
-          ? this.experiments.assignModerationTier(LEVEL2_WARNING_FINAL_EXPERIMENT_ID, message.senderId)
-          : this.experiments.assignModerationTier(LEVEL3_BLOCK_EXPERIMENT_ID, message.senderId);
+      return this.assignTierExperiment(tier, message.senderId);
     });
 
-    const decision: ModerationDecision =
-      tier === "block"
-        ? { action: "block", confidence: 1, reason: "third_or_later_message_auto_block" }
-        : tier === "second_warning"
-          ? { action: "allow", confidence: 1, reason: "second_message_warning_sent" }
-          : { action: "allow", confidence: 1, reason: "first_message_reply_sent" };
+    const decision = decisionForTier(tier);
 
     setSpanAttributes(span, {
       "moderation.tier": tier,
@@ -190,44 +198,72 @@ export class ProcessIncomingMessageUseCase {
     });
 
     if (tier === "first_warning" || tier === "second_warning") {
-      const replyHtml = await this.buildReplyHtml(message, tierAssignment);
-      await withSpan(moderationTracer, "moderation.send_reply", async () =>
-        this.sendFirstMessageReply(message, replyHtml, tierAssignment.mediaPath)
-      );
-      this.actions.saveDeferred({
-        senderId: message.senderId,
-        chatId: message.chatId,
-        sessionId: message.sessionId,
-        decision
-      });
-      const eventName =
-        tier === "first_warning" ? "first_message_reply_sent" : "second_message_warning_sent";
-      this.analytics.trackEvent(eventName, {
-        senderId: message.senderId,
-        chatId: message.chatId,
-        experiment: tierAssignment.experimentId,
-        variant: tierAssignment.variantId,
-        hasMedia: Boolean(tierAssignment.mediaPath)
-      });
-      this.logger.info(eventName, {
-        senderId: message.senderId,
-        chatId: message.chatId,
-        experiment: tierAssignment.experimentId,
-        variant: tierAssignment.variantId,
-        hasMedia: Boolean(tierAssignment.mediaPath)
-      });
-
-      if (tier === "first_warning" && priorBlockOtherAccount) {
-        this.analytics.trackEvent("cross_account_prior_block_detected", {
-          senderId: message.senderId,
-          chatId: message.chatId,
-          sessionId: message.sessionId
-        });
-        await this.priorBlockOwnerPrompt.execute(message, tierAssignment);
-      }
+      await this.handleWarningTier(message, tier, decision, tierAssignment, priorBlockOtherAccount);
       return;
     }
 
+    await this.queueBlockAction(message, decision, tierAssignment);
+  }
+
+  private assignTierExperiment(tier: ModerationTier, senderId: string) {
+    if (tier === "first_warning") {
+      return this.experiments.assignModerationTier(LEVEL1_WARNING_EXPERIMENT_ID, senderId);
+    }
+    if (tier === "second_warning") {
+      return this.experiments.assignModerationTier(LEVEL2_WARNING_FINAL_EXPERIMENT_ID, senderId);
+    }
+    return this.experiments.assignModerationTier(LEVEL3_BLOCK_EXPERIMENT_ID, senderId);
+  }
+
+  private async handleWarningTier(
+    message: IncomingMessage,
+    tier: "first_warning" | "second_warning",
+    decision: ModerationDecision,
+    tierAssignment: Assignment,
+    priorBlockOtherAccount: boolean
+  ): Promise<void> {
+    const replyHtml = await this.buildReplyHtml(message, tierAssignment);
+    await withSpan(moderationTracer, "moderation.send_reply", async () =>
+      this.sendFirstMessageReply(message, replyHtml, tierAssignment.mediaPath)
+    );
+    this.actions.saveDeferred({
+      senderId: message.senderId,
+      chatId: message.chatId,
+      sessionId: message.sessionId,
+      decision
+    });
+    const eventName =
+      tier === "first_warning" ? "first_message_reply_sent" : "second_message_warning_sent";
+    this.analytics.trackEvent(eventName, {
+      senderId: message.senderId,
+      chatId: message.chatId,
+      experiment: tierAssignment.experimentId,
+      variant: tierAssignment.variantId,
+      hasMedia: Boolean(tierAssignment.mediaPath)
+    });
+    this.logger.info(eventName, {
+      senderId: message.senderId,
+      chatId: message.chatId,
+      experiment: tierAssignment.experimentId,
+      variant: tierAssignment.variantId,
+      hasMedia: Boolean(tierAssignment.mediaPath)
+    });
+
+    if (tier === "first_warning" && priorBlockOtherAccount) {
+      this.analytics.trackEvent("cross_account_prior_block_detected", {
+        senderId: message.senderId,
+        chatId: message.chatId,
+        sessionId: message.sessionId
+      });
+      await this.priorBlockOwnerPrompt.execute(message, tierAssignment);
+    }
+  }
+
+  private async queueBlockAction(
+    message: IncomingMessage,
+    decision: ModerationDecision,
+    tierAssignment: Assignment
+  ): Promise<void> {
     this.actions.saveDeferred({
       senderId: message.senderId,
       chatId: message.chatId,
@@ -237,37 +273,37 @@ export class ProcessIncomingMessageUseCase {
 
     await withSpan(moderationTracer, "moderation.queue_block", async () => {
       this.actionQueue.enqueue(async () => {
-      this.analytics.trackEvent("sender_block_queued", {
-        senderId: message.senderId,
-        chatId: message.chatId,
-        experiment: tierAssignment.experimentId,
-        variant: tierAssignment.variantId
-      });
-      const blockMessageHtml = await this.buildReplyHtml(message, tierAssignment);
-      const client = await this.mtprotoSessions.getClientForBlock(message.sessionId);
-      if (!client) {
-        this.logger.error("block_skipped_no_mtproto_session", { sessionId: message.sessionId });
-      } else {
-        await this.executeModerationAction.execute(client, {
+        this.analytics.trackEvent("sender_block_queued", {
           senderId: message.senderId,
-          decision,
-          blockMessageHtml,
-          moderationIncoming: message
+          chatId: message.chatId,
+          experiment: tierAssignment.experimentId,
+          variant: tierAssignment.variantId
         });
-      }
-      const senderRef = formatSenderRefHtml(message.senderId, message.senderUsername);
-      const noticeHtml = `We just blocked ${senderRef}. Please unblock them if you'd like any further interaction.`;
-      const sentViaBot = await this.notifications.sendHTML(message.sessionId, noticeHtml);
-      this.analytics.trackEvent("block_notice_sent", {
-        senderId: message.senderId,
-        sessionId: message.sessionId,
-        sentViaBot,
-        experiment: tierAssignment.experimentId,
-        variant: tierAssignment.variantId
-      });
-      if (!sentViaBot && client) {
-        await this.sendReply(client, "me", noticeHtml);
-      }
+        const blockMessageHtml = await this.buildReplyHtml(message, tierAssignment);
+        const client = await this.mtprotoSessions.getClientForBlock(message.sessionId);
+        if (client) {
+          await this.executeModerationAction.execute(client, {
+            senderId: message.senderId,
+            decision,
+            blockMessageHtml,
+            moderationIncoming: message
+          });
+        } else {
+          this.logger.error("block_skipped_no_mtproto_session", { sessionId: message.sessionId });
+        }
+        const senderRef = formatSenderRefHtml(message.senderId, message.senderUsername);
+        const noticeHtml = `We just blocked ${senderRef}. Please unblock them if you'd like any further interaction.`;
+        const sentViaBot = await this.notifications.sendHTML(message.sessionId, noticeHtml);
+        this.analytics.trackEvent("block_notice_sent", {
+          senderId: message.senderId,
+          sessionId: message.sessionId,
+          sentViaBot,
+          experiment: tierAssignment.experimentId,
+          variant: tierAssignment.variantId
+        });
+        if (!sentViaBot && client) {
+          await this.sendReply(client, "me", noticeHtml);
+        }
       });
     });
 

@@ -290,21 +290,21 @@ export class ClientNotificationService {
 
   private htmlToPlainText(html: string): string {
     return html
-      .replace(/\r\n/g, "\n")
-      .replace(/<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi, "$2 ($1)")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/(p|div|section|article|li|ul|ol|h1|h2|h3|h4|h5|h6)>/gi, "\n")
-      .replace(/<(p|div|section|article|ul|ol|h1|h2|h3|h4|h5|h6)[^>]*>/gi, "\n")
-      .replace(/<li[^>]*>/gi, "- ")
-      .replace(/<[^>]+>/g, "")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">")
-      .replace(/&quot;/gi, "\"")
-      .replace(/&#39;/gi, "'")
-      .replace(/[ \t]+\n/g, "\n")
-      .replace(/\n{3,}/g, "\n\n")
+      .replaceAll(/\r\n/g, "\n")
+      .replaceAll(/<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi, "$2 ($1)")
+      .replaceAll(/<br\s*\/?>/gi, "\n")
+      .replaceAll(/<\/(p|div|section|article|li|ul|ol|h1|h2|h3|h4|h5|h6)>/gi, "\n")
+      .replaceAll(/<(p|div|section|article|ul|ol|h1|h2|h3|h4|h5|h6)[^>]*>/gi, "\n")
+      .replaceAll(/<li[^>]*>/gi, "- ")
+      .replaceAll(/<[^>]+>/g, "")
+      .replaceAll(/&nbsp;/gi, " ")
+      .replaceAll(/&amp;/gi, "&")
+      .replaceAll(/&lt;/gi, "<")
+      .replaceAll(/&gt;/gi, ">")
+      .replaceAll(/&quot;/gi, "\"")
+      .replaceAll(/&#39;/gi, "'")
+      .replaceAll(/[ \t]+\n/g, "\n")
+      .replaceAll(/\n{3,}/g, "\n\n")
       .trim();
   }
 }

@@ -32,7 +32,7 @@ export class Logger {
       ts: new Date().toISOString(),
       level,
       message,
-      ...(meta ?? {})
+      ...meta
     };
     // eslint-disable-next-line no-console
     console.log(JSON.stringify(payload));

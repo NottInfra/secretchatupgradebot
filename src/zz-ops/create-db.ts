@@ -29,8 +29,10 @@ async function main(): Promise<void> {
   logger.info("ops_create_db_ok", { environment: normalized, databaseUrl: "***", sqlPath, nodeEnv: env.NODE_ENV });
 }
 
-void main().catch((error) => {
+try {
+  await main();
+} catch (error) {
   // eslint-disable-next-line no-console
   console.error(error);
   process.exit(1);
-});
+}

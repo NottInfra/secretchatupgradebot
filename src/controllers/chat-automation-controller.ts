@@ -41,12 +41,13 @@ type AutomationMessageShape = {
   sender_business_bot?: { id: number; username?: string };
 };
 
-function extractAutomationMessage(update: Record<string, unknown>): AutomationMessageShape | undefined {
-  const bm = update.business_message as AutomationMessageShape | undefined;
+function extractAutomationMessage(update: object): AutomationMessageShape | undefined {
+  const record = update as Record<string, unknown>;
+  const bm = record.business_message as AutomationMessageShape | undefined;
   if (bm && typeof bm.business_connection_id === "string" && bm.business_connection_id.length > 0) {
     return bm;
   }
-  const m = update.message as AutomationMessageShape | undefined;
+  const m = record.message as AutomationMessageShape | undefined;
   if (m && typeof m.business_connection_id === "string" && m.business_connection_id.length > 0) {
     return m;
   }
@@ -68,7 +69,7 @@ export class ChatAutomationController {
    * @returns true if this update was handled here (do not run normal bot text/onboarding handlers)
    */
   async tryHandle(ctx: Context): Promise<boolean> {
-    const msg = extractAutomationMessage(ctx.update as unknown as Record<string, unknown>);
+    const msg = extractAutomationMessage(ctx.update);
     if (!msg) return false;
 
     if (msg.chat.type && msg.chat.type !== "private") return false;

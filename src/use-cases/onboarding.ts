@@ -1,6 +1,7 @@
 import { StringSession } from "telegram/sessions/index.js";
 import path from "node:path";
 import os from "node:os";
+import type { TelegramClient } from "telegram";
 import { SessionRepository } from "../repositories/session-repository.js";
 import { createTelegramClient } from "../services/telegram/gramjs-client.js";
 import { Logger } from "../utils/logger.js";
@@ -11,6 +12,17 @@ import { env } from "../utils/env.js";
 import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
 
 const onboardingTracer = getTracer("onboarding");
+
+function connectWithTimeout(client: TelegramClient, timeoutMs: number): Promise<boolean> {
+  return Promise.race([
+    client.connect(),
+    new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`onboarding_connect_timeout timeoutMs=${timeoutMs}`));
+      }, timeoutMs);
+    })
+  ]);
+}
 
 type Stage = "idle" | "awaiting_phone" | "authenticating" | "awaiting_code" | "awaiting_password";
 
@@ -104,14 +116,7 @@ export class OnboardingUseCase {
 
       this.logger.info("onboarding_connecting", { userId });
       await withSpan(onboardingTracer, "onboarding.connect", async () =>
-        Promise.race([
-          client.connect(),
-          new Promise<never>((_, reject) => {
-            setTimeout(() => {
-              reject(new Error(`onboarding_connect_timeout timeoutMs=${env.TELEGRAM_CONNECT_TIMEOUT_MS}`));
-            }, env.TELEGRAM_CONNECT_TIMEOUT_MS);
-          })
-        ])
+        connectWithTimeout(client, env.TELEGRAM_CONNECT_TIMEOUT_MS)
       );
       this.logger.info("onboarding_connected", { userId });
       await this.notifications.sendToClient(String(userId), "Connected to Telegram. Sending login code...");

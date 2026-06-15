@@ -32,10 +32,12 @@ import { ToggleModerationUseCase } from "./use-cases/toggle-moderation.js";
 
 let store: Store;
 
-void startApp().catch((error) => {
+try {
+  await startApp();
+} catch (error) {
   console.error("[!] startup failed:", error);
   process.exit(1);
-});
+}
 
 export async function startApp(): Promise<void> {
   const appTracer = getTracer("app");
