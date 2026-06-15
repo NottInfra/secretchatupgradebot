@@ -1,25 +1,15 @@
-import type { Agent } from "node:http";
-import { SocksProxyAgent } from "socks-proxy-agent";
+/** MTProto (GramJS) SOCKS — Bot API (Telegraf) uses direct egress; Telegram blocks many Tor exits. */
 
-export function outboundProxyUrl(): string | undefined {
-  const url =
-    process.env.HTTPS_PROXY?.trim() ||
-    process.env.ALL_PROXY?.trim() ||
-    process.env.HTTP_PROXY?.trim();
+export function mtprotoSocksUrl(): string | undefined {
+  const url = process.env.TELEGRAM_SOCKS_PROXY?.trim();
   return url || undefined;
-}
-
-export function httpsAgentFromEnv(): Agent | undefined {
-  const url = outboundProxyUrl();
-  if (!url) return undefined;
-  return new SocksProxyAgent(url);
 }
 
 /** GramJS SOCKS proxy — requires useWSS=false (see TelegramClient constructor). */
 export function gramjsSocksProxyFromEnv():
   | { ip: string; port: number; socksType: 5 }
   | undefined {
-  const url = outboundProxyUrl();
+  const url = mtprotoSocksUrl();
   if (!url) return undefined;
   const parsed = new URL(url);
   if (parsed.protocol !== "socks5:" && parsed.protocol !== "socks5h:") {

@@ -10,10 +10,8 @@ services:
       NODE_ENV: test
       VAULT_ADDR: http://vault:8200
       VAULT_READ_TOKEN: ${VAULT_READ_TOKEN}
-      HTTPS_PROXY: socks5h://whonix-socks-front:9050
-      HTTP_PROXY: socks5h://whonix-socks-front:9050
-      ALL_PROXY: socks5h://whonix-socks-front:9050
-      NO_PROXY: vault,registry,localhost,127.0.0.1
+      # GramJS MTProto only — Bot API (Telegraf) uses direct egress (Tor exits blocked by Telegram).
+      TELEGRAM_SOCKS_PROXY: socks5h://whonix-socks-front:9050
     ports:
       - "${HOST_PORT}:${CONTAINER_PORT}"
     networks:

@@ -14,7 +14,6 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "pg": "^8.16.3",
-    "socks-proxy-agent": "^8.0.5",
     "telegraf": "^4.16.3",
     "telegram": "^2.26.22",
     "zod": "^4.3.6"
