@@ -17,7 +17,7 @@ build:
   tags: [self-hosted, test]
   <<: *build_rules
   script:
-    - ./release/test.sh build
+    - bash ./release/test.sh build
 
 trivy:
   stage: scan
@@ -25,7 +25,7 @@ trivy:
   needs: [build]
   <<: *build_rules
   script:
-    - ./release/test.sh scan
+    - bash ./release/test.sh scan
 
 deploy:
   stage: deploy
@@ -33,4 +33,4 @@ deploy:
   needs: [build, trivy]
   <<: *build_rules
   script:
-    - ./release/test.sh deploy
+    - bash ./release/test.sh deploy
