@@ -10,6 +10,8 @@ import { logs, SeverityNumber, type Logger } from "@opentelemetry/api-logs";
 import {
   metrics,
   trace,
+  context,
+  ROOT_CONTEXT,
   SpanStatusCode,
   type Counter,
   type Meter,
@@ -165,6 +167,16 @@ export async function withSpan<T>(
       span.end();
     }
   });
+}
+
+/** Start a new trace root — use for long-poll / webhook handlers that must not inherit startup context. */
+export async function withRootSpan<T>(
+  tracer: Tracer,
+  name: string,
+  fn: (span: Span) => Promise<T>,
+  attrs?: Record<string, unknown>
+): Promise<T> {
+  return context.with(ROOT_CONTEXT, () => withSpan(tracer, name, fn, attrs));
 }
 
 export function recordAnalyticsMetric(name: string, props: Record<string, unknown>): void {

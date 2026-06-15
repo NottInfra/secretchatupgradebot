@@ -1,3 +1,4 @@
+import { context, ROOT_CONTEXT } from "@opentelemetry/api";
 import { Telegraf } from "telegraf";
 import { ClientNotificationService } from "../services/client-notification-service.js";
 import type { Logger } from "../utils/logger.js";
@@ -38,15 +39,18 @@ export class MgmtBotService {
       // Explicit probe so failures (invalid token / network / DNS) are visible before long-polling.
       const me = await bot.telegram.getMe();
       this.logger.info("mgmt_bot_identity_ok", { username: me.username, id: me.id });
-      // launch() awaits the polling loop — do not block startup spans on it.
-      void bot.launch({ allowedUpdates: MGMT_BOT_ALLOWED_UPDATES })
-        .then(() => {
-          this.logger.info("mgmt_bot_started");
-        })
-        .catch((error: unknown) => {
-          this.bot = undefined;
-          this.logger.error("mgmt_bot_launch_failed", { error: String(error) });
-        });
+      // Detach from startup span context — polling callbacks must not share one trace.
+      context.with(ROOT_CONTEXT, () => {
+        void bot
+          .launch({ allowedUpdates: MGMT_BOT_ALLOWED_UPDATES })
+          .then(() => {
+            this.logger.info("mgmt_bot_started");
+          })
+          .catch((error: unknown) => {
+            this.bot = undefined;
+            this.logger.error("mgmt_bot_launch_failed", { error: String(error) });
+          });
+      });
     } catch (error) {
       this.bot = undefined;
       this.logger.error("mgmt_bot_launch_failed", { error: String(error) });

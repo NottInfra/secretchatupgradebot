@@ -200,7 +200,8 @@ project_load_staging() {
   RELEASE_FILE="$(project_yaml_get "remotes.${staging}.release")"
   REMOTE_NAME="$(project_yaml_get "remotes.${staging}.remote")"
   REMOTE_URL="$(project_yaml_get "remotes.${staging}.url")"
-  SONAR_KEY="$PROJECT_NAME"
+  SONAR_KEY="$(project_yaml_get mono.sonar_project_key 2>/dev/null || true)"
+  SONAR_KEY="${SONAR_KEY:-$PROJECT_NAME}"
   MONO_HOST="$(project_yaml_get mono.host)"
   ENV_SOURCE="$(project_yaml_get "env.${staging}")"
 }

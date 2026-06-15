@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Push local .env.{test,production} → Vault (dev over NetBird).
+# CI sync (optional): mint VAULT_READ_TOKEN + push VAULT_READ_TOKEN and SONAR_TOKEN to GitHub/GitLab.
+# SONAR_TOKEN: add to .env.test / .env.production (SonarQube → My Account → Security → token).
 # VAULT_ADDR + VAULT_TOKEN: export, or read from ../devops/servers/mono/.env(.local)
 set -euo pipefail
 
@@ -54,8 +56,8 @@ ci_parse_remote_url() {
   return 1
 }
 
-sync_github_vault_read_token() {
-  local repo_url="$1" token="$2" repo
+sync_github_ci_secrets() {
+  local repo_url="$1" vault_read_token="$2" env_file="$3" vault_path="$4" repo sonar
   ci_url_placeholder "$repo_url" && {
     echo "[!] GitHub URL still has YOUR_ORG — set docs/project.yml first" >&2
     return 1
@@ -73,8 +75,15 @@ sync_github_vault_read_token() {
     echo "[!] gh CLI required — install and run: gh auth login" >&2
     return 1
   }
-  gh secret set VAULT_READ_TOKEN --body "$token" -R "$repo"
+  gh secret set VAULT_READ_TOKEN --body "$vault_read_token" -R "$repo"
   echo "[+] GitHub ${repo}: secret VAULT_READ_TOKEN"
+  sonar="$(ci_sonar_token_resolve "$env_file" "$vault_path" 2>/dev/null || true)"
+  if [[ -n "$sonar" ]]; then
+    gh secret set SONAR_TOKEN --body "$sonar" -R "$repo"
+    echo "[+] GitHub ${repo}: secret SONAR_TOKEN"
+  else
+    echo "[i] GitHub ${repo}: SONAR_TOKEN not in env/Vault — skip sonar CI secret"
+  fi
 }
 
 gitlab_var_can_mask() {
@@ -184,8 +193,17 @@ gitlab_token_resolve() {
   printf '%s' "$token"
 }
 
+ci_sonar_token_resolve() {
+  local env_file="$1" vault_path="$2" token
+  token="$(env_file_get SONAR_TOKEN "$env_file" 2>/dev/null || true)"
+  [[ -n "$token" ]] && { printf '%s' "$token"; return 0; }
+  token="$(vault_secret_get "$vault_path" SONAR_TOKEN 2>/dev/null || true)"
+  [[ -n "$token" ]] && { printf '%s' "$token"; return 0; }
+  return 1
+}
+
 sync_gitlab_ci_secrets() {
-  local repo_url="$1" vault_read_token="$2" env_file="${3:-}" vault_path="${4:-}" encoded api gitlab_token
+  local repo_url="$1" vault_read_token="$2" env_file="${3:-}" vault_path="${4:-}" encoded api gitlab_token sonar
   ci_url_placeholder "$repo_url" && {
     echo "[!] GitLab URL still has YOUR_GROUP — set docs/project.yml first" >&2
     return 1
@@ -202,15 +220,22 @@ sync_gitlab_ci_secrets() {
 
   gitlab_ci_upsert_variable "$api" "$gitlab_token" VAULT_READ_TOKEN "$vault_read_token"
   echo "[+] GitLab ${CI_PATH}: variable VAULT_READ_TOKEN"
+  sonar="$(ci_sonar_token_resolve "$env_file" "$vault_path" 2>/dev/null || true)"
+  if [[ -n "$sonar" ]]; then
+    gitlab_ci_upsert_variable "$api" "$gitlab_token" SONAR_TOKEN "$sonar"
+    echo "[+] GitLab ${CI_PATH}: variable SONAR_TOKEN"
+  else
+    echo "[i] GitLab ${CI_PATH}: SONAR_TOKEN not in env/Vault — skip sonar CI variable"
+  fi
 }
 
-sync_ci_vault_read_token() {
-  local staging="$1" token="$2" env_file
+sync_ci_secrets() {
+  local staging="$1" vault_read_token="$2" env_file
   project_load_staging "$staging"
   env_file="${ROOT}/${ENV_SOURCE}"
   case "$staging" in
-    live) sync_github_vault_read_token "$REMOTE_URL" "$token" ;;
-    test) sync_gitlab_ci_secrets "$REMOTE_URL" "$token" "$env_file" "$VAULT_PROJECT" ;;
+    live) sync_github_ci_secrets "$REMOTE_URL" "$vault_read_token" "$env_file" "$VAULT_PROJECT" ;;
+    test) sync_gitlab_ci_secrets "$REMOTE_URL" "$vault_read_token" "$env_file" "$VAULT_PROJECT" ;;
     *)
       echo "[!] No CI mapping for staging: $staging" >&2
       return 1
@@ -274,7 +299,7 @@ issue_ci_read_tokens() {
     echo "   token:   $(mask_token "$read_token")"
     project_load_staging "$staging"
     echo "   remote:  ${REMOTE_NAME} (${REMOTE_URL})"
-    sync_ci_vault_read_token "$staging" "$read_token"
+    sync_ci_secrets "$staging" "$read_token"
   done
 }
 
@@ -371,7 +396,7 @@ if [[ ${#CI_TARGETS[@]} -eq 0 ]]; then
 fi
 
 echo ""
-echo "CI: scoped read token → VAULT_READ_TOKEN on origin (live=GitHub, test=GitLab)"
+echo "CI: VAULT_READ_TOKEN (+ SONAR_TOKEN if set) → GitHub (live) / GitLab (test)"
 read -r -p "Create token(s) and sync to remote CI? [y/N]: " sync_ci
 case "$(_lc "${sync_ci:-}")" in
   y|yes) issue_ci_read_tokens "${CI_TARGETS[@]}" ;;

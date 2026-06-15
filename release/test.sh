@@ -32,6 +32,11 @@ run_scan() {
   mono_trivy_scan "$IMAGE"
 }
 
+run_sonar() {
+  branch_gate
+  mono_sonar_scan "$SONAR_KEY"
+}
+
 run_deploy() {
   branch_gate
   export IMAGE CONTAINER_NAME HOST_PORT CONTAINER_PORT VAULT_READ_TOKEN
@@ -42,14 +47,16 @@ run_deploy() {
 case "$step" in
   build) run_build ;;
   scan) run_scan ;;
+  sonar) run_sonar ;;
   deploy) run_deploy ;;
   all)
     run_build
     run_scan
+    run_sonar
     run_deploy
     ;;
   *)
-    echo "[!] unknown step: $step (build|scan|deploy|all)" >&2
+    echo "[!] unknown step: $step (build|scan|sonar|deploy|all)" >&2
     exit 1
     ;;
 esac

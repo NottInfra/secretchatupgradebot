@@ -1,6 +1,7 @@
 stages:
   - build
   - scan
+  - sonar
   - deploy
 
 variables:
@@ -32,10 +33,18 @@ trivy:
   script:
     - bash ./release/test.sh scan
 
+sonar:
+  stage: sonar
+  tags: [self-hosted, test]
+  needs: [build]
+  <<: *build_rules
+  script:
+    - bash ./release/test.sh sonar
+
 deploy:
   stage: deploy
   tags: [self-hosted, test]
-  needs: [build, trivy]
+  needs: [build, trivy, sonar]
   <<: *build_rules
   script:
     - bash ./release/test.sh deploy

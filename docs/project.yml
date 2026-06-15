@@ -1,7 +1,8 @@
 # Project manifest — remotes, deploy wiring (committed; no secrets).
 # Runtime env (AUTH_HOST_BASE, tokens, observability creds, …) lives in .env.production / .env.test
 # → push with cmd/apply-env-file-hashicorp → Vault secret/{staging}-{project}
-# → optional: script creates ci-read-* token + sets VAULT_READ_TOKEN on GitHub/GitLab
+# → optional CI sync: mint ci-read token → VAULT_READ_TOKEN on GitHub/GitLab
+# → same step: SONAR_TOKEN from .env.* → GitHub/GitLab (CI scan only; not app runtime)
 # → CI passes VAULT_READ_TOKEN; app initEnv() reads Vault at runtime
 
 project: secretchatonly-bot
@@ -12,6 +13,7 @@ mono:
   registry: registry:5000          # compose / mono network
   registry_host: 127.0.0.1:5000  # CI build+push via host docker socket
   network: mono
+  sonar_project_key: secretchatonly-bot
 
 remotes:
   live:

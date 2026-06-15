@@ -4,7 +4,7 @@ import type { ClientNotificationService } from "../services/client-notification-
 import type { SessionModerationToggleMiddleware } from "../middleware/session-moderation-toggle-middleware.js";
 import type { ProcessIncomingMessageUseCase } from "../use-cases/process-incoming-message.js";
 import type { Logger } from "../utils/logger.js";
-import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
+import { getTracer, setSpanAttributes, withRootSpan, withSpan } from "../utils/telemetry.js";
 
 const chatAutomationTracer = getTracer("chat_automation");
 const ONBOARDING_REMINDER_COOLDOWN_MS = 15 * 60 * 1000;
@@ -78,7 +78,7 @@ export class ChatAutomationController {
     const bcId = msg.business_connection_id;
     if (!bcId) return false;
 
-    return withSpan(
+    return withRootSpan(
       chatAutomationTracer,
       "chat_automation.handle_update",
       async (span) => {
