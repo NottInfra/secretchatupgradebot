@@ -17,4 +17,11 @@ describe("htmlToPlainText", () => {
   it("formats list items and collapses blank lines", () => {
     expect(htmlToPlainText("<ul><li>one</li><li>two</li></ul>\n\n\n")).toBe("- one\n- two");
   });
+
+  it("handles pathological input without hanging", () => {
+    const evil = "<a href=\"" + "a".repeat(10_000) + "\">" + "x".repeat(10_000);
+    const start = performance.now();
+    htmlToPlainText(evil);
+    expect(performance.now() - start).toBeLessThan(500);
+  });
 });
