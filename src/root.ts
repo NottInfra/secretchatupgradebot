@@ -101,6 +101,7 @@ export async function startApp(): Promise<void> {
       useCase,
       sessionModerationToggle,
       sessions,
+      notifications,
       logger
     );
     const botService = new MgmtBotService(

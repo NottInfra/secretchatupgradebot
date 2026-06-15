@@ -1,11 +1,28 @@
 import type { Context } from "telegraf";
 import type { SessionRepository } from "../repositories/session-repository.js";
+import type { ClientNotificationService } from "../services/client-notification-service.js";
 import type { SessionModerationToggleMiddleware } from "../middleware/session-moderation-toggle-middleware.js";
 import type { ProcessIncomingMessageUseCase } from "../use-cases/process-incoming-message.js";
 import type { Logger } from "../utils/logger.js";
 import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
 
 const chatAutomationTracer = getTracer("chat_automation");
+const ONBOARDING_REMINDER_COOLDOWN_MS = 15 * 60 * 1000;
+
+function onboardingReminderHtml(hasSessionRow: boolean): string {
+  const step1 = hasSessionRow
+    ? "Finish onboarding: send <b>/start</b> again and complete phone + login code (and 2FA if enabled). We need your session to block senders on the 3rd message."
+    : "Send <b>/start</b> here and complete onboarding (phone + login code). We need your session to block senders on the 3rd message.";
+
+  return (
+    "<b>Moderation is not ready</b>\n\n" +
+    "Someone messaged your account but we could not moderate yet.\n\n" +
+    `<b>1.</b> ${step1}\n` +
+    "<b>2.</b> In Telegram → <b>Business → Chatbots</b>, connect this bot and allow it to read/reply to your messages and block contacts.\n" +
+    "<b>3.</b> Send <b>/toggle</b> to turn moderation on.\n\n" +
+    "See /help for full instructions."
+  );
+}
 
 /**
  * Bot API path for messages tied to a user's account via Business / Chat Automation.
@@ -35,10 +52,13 @@ function extractAutomationMessage(update: Record<string, unknown>): AutomationMe
 }
 
 export class ChatAutomationController {
+  private readonly onboardingReminderLastSent = new Map<string, number>();
+
   constructor(
     private readonly processIncoming: ProcessIncomingMessageUseCase,
     private readonly sessionModeration: SessionModerationToggleMiddleware,
     private readonly sessions: SessionRepository,
+    private readonly notifications: ClientNotificationService,
     private readonly logger: Logger
   ) {}
 
@@ -116,8 +136,10 @@ export class ChatAutomationController {
         if (!record?.active || !record.sessionString.trim()) {
           this.logger.warn("chat_automation_no_onboarded_session", {
             ownerUserId,
+            hasSessionRow: Boolean(record),
             hint: "User must complete /start onboarding before business automation is moderated"
           });
+          await this.notifyOnboardingRequired(ownerUserId, Boolean(record));
           return true;
         }
 
@@ -154,5 +176,21 @@ export class ChatAutomationController {
         return true;
       }
     );
+  }
+
+  /** Tell the account owner to finish onboarding (throttled — once per 15 min per user). */
+  private async notifyOnboardingRequired(ownerUserId: string, hasSessionRow: boolean): Promise<void> {
+    const now = Date.now();
+    const last = this.onboardingReminderLastSent.get(ownerUserId) ?? 0;
+    if (now - last < ONBOARDING_REMINDER_COOLDOWN_MS) return;
+    this.onboardingReminderLastSent.set(ownerUserId, now);
+
+    const sent = await this.notifications.sendHTML(
+      ownerUserId,
+      onboardingReminderHtml(hasSessionRow)
+    );
+    if (sent) {
+      this.logger.info("chat_automation_onboarding_reminder_sent", { ownerUserId, hasSessionRow });
+    }
   }
 }
