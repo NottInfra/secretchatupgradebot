@@ -24,7 +24,10 @@ step="${1:-all}"
 
 run_build() {
   branch_gate
-  docker build -t "$IMAGE" .
+  docker build -t "$IMAGE_HOST" .
+  if [[ "$IMAGE_HOST" != "$IMAGE" ]]; then
+    docker tag "$IMAGE_HOST" "$IMAGE"
+  fi
 }
 
 run_scan() {
@@ -39,7 +42,10 @@ run_sonar() {
 
 run_push() {
   branch_gate
-  docker push "$IMAGE"
+  docker push "$IMAGE_HOST"
+  if [[ "$IMAGE_HOST" != "$IMAGE" ]]; then
+    docker tag "$IMAGE_HOST" "$IMAGE"
+  fi
 }
 
 run_deploy() {

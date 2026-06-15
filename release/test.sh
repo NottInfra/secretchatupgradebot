@@ -24,8 +24,7 @@ step="${1:-all}"
 
 run_build() {
   branch_gate
-  docker build -t "$IMAGE" .
-  docker push "$IMAGE"
+  mono_registry_publish "$IMAGE_HOST" "$IMAGE"
 }
 
 run_scan() {

@@ -41,3 +41,13 @@ mono_sonar_scan() {
       -Dsonar.sources="$sources" \
     || true
 }
+
+# Host daemon push (127.0.0.1:5000) + local tag for compose (registry:5000 on mono network).
+mono_registry_publish() {
+  local host_image="$1" compose_image="$2" context="${3:-.}"
+  docker build -t "$host_image" "$context"
+  docker push "$host_image"
+  if [[ "$host_image" != "$compose_image" ]]; then
+    docker tag "$host_image" "$compose_image"
+  fi
+}

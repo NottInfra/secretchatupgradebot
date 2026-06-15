@@ -9,7 +9,8 @@ group: null
 
 mono:
   host: 104.152.211.241
-  registry: registry:5000
+  registry: registry:5000          # compose / mono network
+  registry_host: 127.0.0.1:5000  # CI build+push via host docker socket
   network: mono
 
 remotes:

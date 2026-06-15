@@ -85,6 +85,7 @@ project_yaml_get() {
     group) _yaml_top group ;;
     mono.host) _yaml_section2 mono host ;;
     mono.registry) _yaml_section2 mono registry ;;
+    mono.registry_host) _yaml_section2 mono registry_host ;;
     mono.network) _yaml_section2 mono network ;;
     remotes.live.remote) _yaml_remote live remote ;;
     remotes.live.url) _yaml_remote live url ;;
@@ -148,6 +149,27 @@ project_image() {
   echo "${registry}/${project}:${tag}"
 }
 
+# Host Docker daemon (CI build/push via socket) — registry:5000 only resolves on mono network.
+project_registry_host() {
+  local host
+  host="${REGISTRY_HOST:-${REGISTRY:-}}"
+  if [[ -n "$host" ]]; then
+    printf '%s' "$host"
+    return
+  fi
+  host="$(project_yaml_get mono.registry_host 2>/dev/null || true)"
+  printf '%s' "${host:-127.0.0.1:5000}"
+}
+
+project_image_host() {
+  local staging registry project tag
+  staging="$(project_normalize_staging "$1")"
+  registry="$(project_registry_host)"
+  project="$(project_yaml_get project)"
+  tag="$(project_yaml_get "staging.${staging}.registry_tag")"
+  echo "${registry}/${project}:${tag}"
+}
+
 project_container_name() {
   local staging project
   staging="$(project_normalize_staging "$1")"
@@ -161,6 +183,7 @@ project_load_staging() {
   STAGING="$staging"
   PROJECT_NAME="$(project_yaml_get project)"
   IMAGE="$(project_image "$staging")"
+  IMAGE_HOST="$(project_image_host "$staging")"
   CONTAINER_NAME="$(project_container_name "$staging")"
   VAULT_PROJECT="$(project_vault_path "$staging")"
   ENV_FILE="$(project_host_env_file "$staging")"
@@ -179,7 +202,7 @@ project_export_staging() {
   local staging="${1:?}" fmt="${2:-shell}"
   project_load_staging "$staging"
   local vars=(
-    STAGING PROJECT_NAME IMAGE CONTAINER_NAME ENV_FILE HOST_PORT CONTAINER_PORT
+    STAGING PROJECT_NAME IMAGE IMAGE_HOST CONTAINER_NAME ENV_FILE HOST_PORT CONTAINER_PORT
     VAULT_PROJECT EXPECTED_BRANCH RELEASE_FILE REMOTE_NAME REMOTE_URL SONAR_KEY MONO_HOST ENV_SOURCE
   )
   local v
