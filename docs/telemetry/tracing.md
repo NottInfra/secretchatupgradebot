@@ -297,7 +297,7 @@ notification.send        (nested under policy, onboarding, block notice, etc.)
 - **Source:** `src/use-cases/process-incoming-message.ts`
 - **Tracer:** `moderation`
 - **Parent:** `moderation.process_incoming`
-- **When:** `countBySender` + `countInMessagingInstance` for tier selection
+- **When:** `countBySender` for tier selection (1st / 2nd / 3rd+ message from sender)
 
 ### `moderation.assign_tier`
 

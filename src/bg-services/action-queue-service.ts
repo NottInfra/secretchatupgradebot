@@ -6,7 +6,7 @@ export class ActionQueueService {
   private readonly queue: ActionTask[] = [];
   private isRunning = false;
 
-  constructor(private readonly logger: Logger, private readonly delayMs = 1200) {}
+  constructor(private readonly logger: Logger, private readonly delayMs = 0) {}
 
   enqueue(task: ActionTask): void {
     this.queue.push(task);

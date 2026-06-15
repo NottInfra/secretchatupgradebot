@@ -19,7 +19,6 @@ const moderationTracer = getTracer("moderation");
 const LEVEL1_WARNING_EXPERIMENT_ID = "level1_message_warning";
 const LEVEL2_WARNING_FINAL_EXPERIMENT_ID = "level2_message_warning_final";
 const LEVEL3_BLOCK_EXPERIMENT_ID = "level3_messages_block";
-const MESSAGING_INSTANCE_COLLAPSE_WINDOW_SECONDS = 20;
 
 export class ProcessIncomingMessageUseCase {
   private readonly sessionUsernameByClient = new WeakMap<TelegramClient, string>();
@@ -115,48 +114,9 @@ export class ProcessIncomingMessageUseCase {
       return;
     }
 
-    const { count, inInstanceCount } = await withSpan(
-      moderationTracer,
-      "moderation.load_history",
-      async () => ({
-        count: await this.messages.countBySender(
-          message.senderId,
-          MESSAGING_INSTANCE_COLLAPSE_WINDOW_SECONDS
-        ),
-        inInstanceCount: await this.messages.countInMessagingInstance(
-          message.senderId,
-          message.date,
-          MESSAGING_INSTANCE_COLLAPSE_WINDOW_SECONDS
-        )
-      })
+    const count = await withSpan(moderationTracer, "moderation.load_history", async () =>
+      this.messages.countBySender(message.senderId)
     );
-    if (inInstanceCount > 1) {
-      const decision: ModerationDecision = {
-        action: "ignore",
-        confidence: 1,
-        reason: "messaging_instance_burst_skip"
-      };
-      this.actions.saveDeferred({
-        senderId: message.senderId,
-        chatId: message.chatId,
-        decision
-      });
-      this.analytics.trackEvent("moderation_decision", {
-        senderId: message.senderId,
-        chatId: message.chatId,
-        action: decision.action,
-        confidence: decision.confidence,
-        reason: decision.reason,
-        tier: "skipped_burst",
-        instanceMessageCount: inInstanceCount
-      });
-      this.logger.info("moderation_skipped_messaging_burst", {
-        senderId: message.senderId,
-        chatId: message.chatId,
-        instanceMessageCount: inInstanceCount
-      });
-      return;
-    }
 
     const tier: "first_warning" | "second_warning" | "block" =
       count === 1 ? "first_warning" : count === 2 ? "second_warning" : "block";

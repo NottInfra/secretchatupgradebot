@@ -55,8 +55,7 @@ export async function startApp(): Promise<void> {
     const executeModerationAction = new ExecuteModerationActionUseCase(notifications, logger);
     const handlePolicyUseCase = new HandlePolicyUseCase(notifications, analytics, logger);
     const toggleModerationUseCase = new ToggleModerationUseCase(sessions, notifications, analytics, logger);
-    const messageAssetRoot =
-      env.NODE_ENV === "test" ? path.resolve("assets/messages-test") : path.resolve("assets/messages");
+    const messageAssetRoot = path.resolve("assets/messages");
     const experiments = new ExperimentService(
       [
         path.join(messageAssetRoot, "message-warning"),
