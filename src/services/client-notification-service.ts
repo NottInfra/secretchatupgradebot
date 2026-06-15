@@ -142,6 +142,7 @@ export class ClientNotificationService {
       async (span) => {
         setSpanAttributes(span, {
           "telegram.chat_id": input.chatId,
+          "telegram.transport": "bot_api",
           "notification.kind": "business_html_reply"
         });
         if (!this.bot) {
@@ -188,68 +189,89 @@ export class ClientNotificationService {
   async sendBusinessMediaReply(
     input: BusinessAutomationReplyInput & { mediaPath: string }
   ): Promise<boolean> {
-    if (!this.bot) {
-      this.logger.warn("business_automation_media_reply_skipped_bot_unavailable", {
-        chatId: input.chatId
-      });
-      return false;
-    }
-
-    const chatId = Number(input.chatId);
-    if (!Number.isFinite(chatId)) {
-      this.logger.warn("business_automation_media_reply_skipped_invalid_chat_id", {
-        chatId: input.chatId
-      });
-      return false;
-    }
-
-    const replyParams =
-      input.replyToMessageId != null && input.replyToMessageId > 0
-        ? { reply_parameters: { message_id: input.replyToMessageId } }
-        : {};
     const ext = path.extname(input.mediaPath).toLowerCase();
     const isVideo = ext === ".mp4" || ext === ".mov" || ext === ".webm";
 
-    try {
-      if (isVideo) {
-        await this.bot.telegram.callApi(
-          "sendVideo",
-          {
-            business_connection_id: input.businessConnectionId,
-            chat_id: chatId,
-            video: Input.fromLocalFile(input.mediaPath),
-            caption: input.html,
-            parse_mode: "HTML",
-            ...replyParams
-          } as Parameters<typeof this.bot.telegram.callApi>[1]
-        );
-      } else {
-        await this.bot.telegram.callApi(
-          "sendPhoto",
-          {
-            business_connection_id: input.businessConnectionId,
-            chat_id: chatId,
-            photo: Input.fromLocalFile(input.mediaPath),
-            caption: input.html,
-            parse_mode: "HTML",
-            ...replyParams
-          } as Parameters<typeof this.bot.telegram.callApi>[1]
-        );
+    return withSpan(
+      notificationTracer,
+      "notification.send",
+      async (span) => {
+        setSpanAttributes(span, {
+          "telegram.chat_id": input.chatId,
+          "telegram.transport": "bot_api",
+          "notification.kind": isVideo ? "business_video_reply" : "business_photo_reply",
+          "media.path": path.basename(input.mediaPath),
+          "media.ext": ext || "unknown"
+        });
+        try {
+          const stat = fs.statSync(input.mediaPath);
+          setSpanAttributes(span, { "media.bytes": stat.size });
+        } catch {
+          // optional attribute
+        }
+
+        if (!this.bot) {
+          this.logger.warn("business_automation_media_reply_skipped_bot_unavailable", {
+            chatId: input.chatId
+          });
+          return false;
+        }
+
+        const chatId = Number(input.chatId);
+        if (!Number.isFinite(chatId)) {
+          this.logger.warn("business_automation_media_reply_skipped_invalid_chat_id", {
+            chatId: input.chatId
+          });
+          return false;
+        }
+
+        const replyParams =
+          input.replyToMessageId != null && input.replyToMessageId > 0
+            ? { reply_parameters: { message_id: input.replyToMessageId } }
+            : {};
+
+        try {
+          if (isVideo) {
+            await this.bot.telegram.callApi(
+              "sendVideo",
+              {
+                business_connection_id: input.businessConnectionId,
+                chat_id: chatId,
+                video: Input.fromLocalFile(input.mediaPath),
+                caption: input.html,
+                parse_mode: "HTML",
+                ...replyParams
+              } as Parameters<typeof this.bot.telegram.callApi>[1]
+            );
+          } else {
+            await this.bot.telegram.callApi(
+              "sendPhoto",
+              {
+                business_connection_id: input.businessConnectionId,
+                chat_id: chatId,
+                photo: Input.fromLocalFile(input.mediaPath),
+                caption: input.html,
+                parse_mode: "HTML",
+                ...replyParams
+              } as Parameters<typeof this.bot.telegram.callApi>[1]
+            );
+          }
+          this.logger.info("business_automation_media_reply_sent", {
+            chatId: input.chatId,
+            mediaPath: input.mediaPath,
+            replyToMessageId: input.replyToMessageId
+          });
+          return true;
+        } catch (error) {
+          this.logger.error("business_automation_media_reply_failed", {
+            chatId: input.chatId,
+            mediaPath: input.mediaPath,
+            error: String(error)
+          });
+          return this.sendBusinessHTMLReply(input);
+        }
       }
-      this.logger.info("business_automation_media_reply_sent", {
-        chatId: input.chatId,
-        mediaPath: input.mediaPath,
-        replyToMessageId: input.replyToMessageId
-      });
-      return true;
-    } catch (error) {
-      this.logger.error("business_automation_media_reply_failed", {
-        chatId: input.chatId,
-        mediaPath: input.mediaPath,
-        error: String(error)
-      });
-      return this.sendBusinessHTMLReply(input);
-    }
+    );
   }
 
   async sendHTMLFile(clientUserId: string, filePath: string): Promise<boolean> {

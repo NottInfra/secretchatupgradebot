@@ -15,8 +15,11 @@ import { ExecuteModerationActionUseCase } from "./execute-moderation-action.js";
 import { SendPriorBlockOwnerPromptUseCase } from "./send-prior-block-owner-prompt.js";
 import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
 import type { Span } from "@opentelemetry/api";
+import path from "node:path";
+import fs from "node:fs";
 
 const moderationTracer = getTracer("moderation");
+const telegramTracer = getTracer("telegram");
 
 const LEVEL1_WARNING_EXPERIMENT_ID = "level1_message_warning";
 const LEVEL2_WARNING_FINAL_EXPERIMENT_ID = "level2_message_warning_final";
@@ -307,8 +310,16 @@ export class ProcessIncomingMessageUseCase {
     }
 
     try {
-      const entity = await this.getReplyInputPeer(client, message);
-      await client.sendMessage(entity, { message: html, parseMode: "html" });
+      const entity = await withSpan(moderationTracer, "moderation.resolve_peer", async () =>
+        this.getReplyInputPeer(client, message)
+      );
+      await withSpan(telegramTracer, "telegram.send_message", async (sendSpan) => {
+        setSpanAttributes(sendSpan, {
+          "telegram.chat_id": message.chatId,
+          "telegram.transport": "mtproto"
+        });
+        await client.sendMessage(entity, { message: html, parseMode: "html" });
+      });
     } catch (error) {
       this.logger.error("failed_to_send_reply", { chatId: message.chatId, error: String(error) });
     }
@@ -351,11 +362,27 @@ export class ProcessIncomingMessageUseCase {
       return;
     }
     try {
-      const entity = await this.getReplyInputPeer(client, message);
-      await client.sendFile(entity, {
-        file: mediaPath,
-        caption: html,
-        parseMode: "html"
+      const entity = await withSpan(moderationTracer, "moderation.resolve_peer", async () =>
+        this.getReplyInputPeer(client, message)
+      );
+      await withSpan(telegramTracer, "telegram.send_media", async (sendSpan) => {
+        setSpanAttributes(sendSpan, {
+          "telegram.chat_id": message.chatId,
+          "telegram.transport": "mtproto",
+          "media.path": path.basename(mediaPath),
+          "media.ext": path.extname(mediaPath).toLowerCase() || "unknown"
+        });
+        try {
+          const stat = fs.statSync(mediaPath);
+          setSpanAttributes(sendSpan, { "media.bytes": stat.size });
+        } catch {
+          // optional attribute
+        }
+        await client.sendFile(entity, {
+          file: mediaPath,
+          caption: html,
+          parseMode: "html"
+        });
       });
     } catch (error) {
       this.logger.error("failed_to_send_media_reply", {

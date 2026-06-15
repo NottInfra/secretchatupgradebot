@@ -56,6 +56,16 @@
       ],
       "title": "Event rate by name",
       "type": "timeseries"
+    },
+    {
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 12 },
+      "id": 4,
+      "options": {
+        "content": "### Traces (span timings) — use Explore, not this dashboard\n\nMetrics above count **events**. **Span durations** are in **Tempo**.\n\n1. **Kibana** → `secretchatonly-bot-analytics` → copy **`TraceId`** from an event\n2. **Grafana → Explore → Tempo** → paste the trace ID → open the waterfall\n\nTrace *search* by service hangs on mono (Tempo local storage / very long-lived traces). **Trace-by-ID is fast** — same as you already used in Explore.",
+        "mode": "markdown"
+      },
+      "title": "Traces (Tempo)",
+      "type": "text"
     }
   ],
   "refresh": "30s",

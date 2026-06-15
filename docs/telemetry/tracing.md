@@ -317,6 +317,15 @@ notification.send        (nested under policy, onboarding, block notice, etc.)
 - **Tracer:** `moderation`
 - **Parent:** `moderation.process_incoming`
 - **When:** Level-1 or level-2 warning reply (MTProto or business automation path)
+- **Children:** `notification.send` (Bot API) or `moderation.resolve_peer` + `telegram.send_message` / `telegram.send_media` (MTProto)
+
+### `telegram.send_message` / `telegram.send_media`
+
+- **Source:** `src/use-cases/process-incoming-message.ts`
+- **Tracer:** `telegram`
+- **Parent:** `moderation.send_reply`
+- **When:** GramJS `sendMessage` / `sendFile` for warning replies
+- **Attributes:** `telegram.chat_id`, `telegram.transport` (`mtproto`), `media.path`, `media.bytes` (media only)
 
 ### `moderation.queue_block`
 
@@ -360,10 +369,13 @@ notification.send        (nested under policy, onboarding, block notice, etc.)
 - **Source:** `src/services/client-notification-service.ts`
 - **Tracer:** `notification`
 - **When:** Outbound DM to session owner or business automation reply
-- **Attributes:** `telegram.client_user_id` or `telegram.chat_id`, `notification.kind`:
+- **Attributes:** `telegram.client_user_id` or `telegram.chat_id`, `telegram.transport` (`bot_api`), `notification.kind`:
   - `text` — `sendToClient`
   - `html` — `sendHTML`
   - `business_html_reply` — `sendBusinessHTMLReply`
+  - `business_video_reply` — `sendBusinessMediaReply` (`.mp4` / `.mov` / `.webm`)
+  - `business_photo_reply` — `sendBusinessMediaReply` (other image types)
+- **Media attributes:** `media.path`, `media.ext`, `media.bytes`
 - **Related logs:** `client_notification_sent`, `client_notification_failed`, `business_automation_reply_*`
 
 ---
@@ -388,9 +400,23 @@ Business **counts** → analytics + Mimir. Workflow **timing** → spans + Tempo
 
 ### Grafana — traces (Tempo)
 
+Traces live in **Tempo**, not on the Mimir dashboard. **Explore → Tempo** with a `TraceId` from Kibana analytics (trace-by-ID is fast).
+
+```
+479c8eb5ebc4a2bbd90408ead8c19bd4
+```
+
+Or TraceQL in Explore:
+
 ```
 { resource.service.name = "secretchatonly-bot" && name = "moderation.process_incoming" }
 ```
+
+Elasticsearch analytics events carry `TraceId` / `SpanId` — they mark when an event fired in a trace. Open the trace in Tempo for span names and durations (`moderation.process_incoming`, `moderation.send_reply`, etc.).
+
+**Dashboard:** metrics panels only. A Tempo *search* panel hangs on mono; use Explore instead.
+
+After mono pulls devops datasource config: Tempo **Logs for this trace** → `secretchatonly-bot-analytics`; optional **View trace in Tempo** link on `TraceId` in Grafana Elasticsearch Analytics.
 
 ### Grafana — metrics (Mimir)
 
