@@ -35,9 +35,13 @@ trivy:
 
 sonar:
   stage: sonar
+  image: sonarsource/sonar-scanner-cli:11.5
   tags: [self-hosted, test]
   needs: [build]
   <<: *build_rules
+  variables:
+    SONAR_HOST_URL: http://sonarqube:9000
+  before_script: []
   script:
     - bash ./release/test.sh sonar
 
