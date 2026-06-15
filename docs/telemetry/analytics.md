@@ -2,16 +2,17 @@
 
 Business telemetry via `Analytics.trackEvent(...)` in `src/utils/analytics.ts`.
 
-Each event is exported twice on mono (different backends, different questions):
+Each event is exported to **Mimir metrics** today. Ops logs (including some events like `moderation_toggled`) go to **stdout → Filebeat → `logstash-*`** in Kibana Discover.
 
 | Destination | Path | Question it answers | UI |
 |-------------|------|---------------------|-----|
 | **Mimir** | App → OTLP `/v1/metrics` → otel-collector → Mimir | How many? What rate? Per `event` label? | Grafana — [dashboards/grafana.json](../../dashboards/grafana.json) |
-| **Elasticsearch** | App → OTLP → otel-collector → Elasticsearch index | What happened? Search by `senderId`, `tier`, `experiment`? | Kibana — [dashboards/kibana.ndjson](../../dashboards/kibana.ndjson) |
+| **Ops logs (ELK)** | App → stdout JSON → Filebeat → Logstash → `logstash-*` | What happened in the process? grep by `message` | Kibana Discover (`logstash-*` data view) |
+| **Elasticsearch analytics stream** | Not wired yet — `secretchatonly-bot-analytics` is bootstrapped for Kibana import only | Future: searchable event documents | [dashboards/kibana.ndjson](../../dashboards/kibana.ndjson) (empty until ES export is added) |
 
-Counter in Mimir: `analytics_events_total` with labels `event`, prop attributes (stringified), `deployment_environment`.
+Counter in Mimir: `analytics_events_total` with labels `event`, prop attributes (stringified), `deployment_environment` (from `NODE_ENV`, e.g. `test`).
 
-Documents in Elasticsearch data stream: **`secretchatonly-bot-analytics`** (pattern `secretchatonly-bot-analytics-*` in Kibana).
+The Kibana analytics dashboard reads data stream **`secretchatonly-bot-analytics`**, which today only has the bootstrap doc from `./cmd/define-elasticsearch`. **`moderation_toggled` will not appear there** until analytics documents are exported to ES (collector/app change). It **does** appear in container logs and, after ~60s, in Grafana if OTEL reaches Mimir.
 
 ### Elasticsearch document shape
 

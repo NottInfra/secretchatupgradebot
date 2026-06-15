@@ -74,6 +74,17 @@ export async function initTelemetry(): Promise<void> {
   analyticsCounter = meter.createCounter("analytics_events_total", {
     description: "Business analytics events"
   });
+
+  console.log(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      level: "info",
+      message: "telemetry_initialized",
+      endpoint,
+      serviceName,
+      environment: env
+    })
+  );
 }
 
 export async function shutdownTelemetry(): Promise<void> {

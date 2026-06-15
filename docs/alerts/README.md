@@ -23,6 +23,8 @@ File: [alerts/kibana.ndjson](../../alerts/kibana.ndjson)
 
 ### Analytics index (`secretchatonly-bot-analytics-*`)
 
+Uses dynamic mapping on mono — run **`cmd/define-elasticsearch`** before import ([assets/elasticsearch/analytics-index-template.json](../../assets/elasticsearch/analytics-index-template.json)).
+
 | Rule | Query | When |
 |------|-------|------|
 | `analytics_onboarding_failed_spike` | `event: "onboarding_failed"` count > 5 in 15m | Auth flow broken |

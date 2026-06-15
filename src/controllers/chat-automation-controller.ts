@@ -99,7 +99,14 @@ export class ChatAutomationController {
         }
 
         const enabled = await this.sessionModeration.isEnabled(ownerUserId);
-        if (!enabled) return true;
+        if (!enabled) {
+          this.logger.info("chat_automation_skipped_moderation_off", {
+            ownerUserId,
+            chatId: String(msg.chat.id),
+            messageId: msg.message_id
+          });
+          return true;
+        }
 
         const record = await withSpan(
           chatAutomationTracer,
@@ -118,6 +125,14 @@ export class ChatAutomationController {
           typeof msg.text === "string" && msg.text.trim().length > 0 ? msg.text : "[non-text message]";
         const senderUsername =
           typeof from.username === "string" && from.username.length > 0 ? from.username : undefined;
+
+        this.logger.info("chat_automation_inbound", {
+          ownerUserId,
+          chatId: String(msg.chat.id),
+          senderId: String(from.id),
+          messageId: msg.message_id,
+          businessConnectionId: bcId
+        });
 
         try {
           await this.processIncoming.execute({

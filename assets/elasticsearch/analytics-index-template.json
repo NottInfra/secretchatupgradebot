@@ -1,0 +1,10 @@
+{
+  "index_patterns": ["secretchatonly-bot-analytics*"],
+  "data_stream": {},
+  "priority": 10000,
+  "template": {
+    "mappings": {
+      "dynamic": true
+    }
+  }
+}
