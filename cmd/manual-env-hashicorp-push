@@ -77,22 +77,58 @@ sync_github_vault_read_token() {
   echo "[+] GitHub ${repo}: secret VAULT_READ_TOKEN"
 }
 
+gitlab_var_can_mask() {
+  local value="$1"
+  [[ ${#value} -ge 8 ]] || return 1
+  [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || return 1
+  [[ "$value" =~ ^[A-Za-z0-9+/=@:.,~_-]+$ ]]
+}
+
 gitlab_ci_upsert_variable() {
-  local api="$1" gitlab_token="$2" key="$3" value="$4" body
-  body="$(jq -n --arg k "$key" --arg v "$value" \
-    '{key:$k,value:$v,masked:true,protected:false,variable_type:"env_var"}')"
-  if curl -fsS --request PUT \
+  local api="$1" gitlab_token="$2" key="$3" value="$4" masked="false" body tmp http_code
+  if gitlab_var_can_mask "$value"; then
+    masked="true"
+  else
+    echo "[i] ${key}: value not maskable in GitLab — storing unmasked" >&2
+  fi
+  body="$(jq -n \
+    --arg k "$key" \
+    --arg v "$value" \
+    --argjson masked "$masked" \
+    '{key:$k,value:$v,masked:$masked,protected:false,variable_type:"env_var"}')"
+  tmp="$(mktemp)"
+  if curl -sS -o "$tmp" -w '%{http_code}' \
+    --header "PRIVATE-TOKEN: ${gitlab_token}" \
+    "${api}/${key}" | grep -qx '200'; then
+    http_code="$(curl -sS -o "$tmp" -w '%{http_code}' \
+      --request PUT \
+      --header "PRIVATE-TOKEN: ${gitlab_token}" \
+      --header "Content-Type: application/json" \
+      --data "$body" \
+      "${api}/${key}")"
+    if [[ "$http_code" =~ ^2 ]]; then
+      rm -f "$tmp"
+      return 0
+    fi
+    echo "[!] GitLab variable ${key} update failed (HTTP ${http_code}):" >&2
+    sed 's/.*/   &/' "$tmp" >&2
+    rm -f "$tmp"
+    return 1
+  fi
+  http_code="$(curl -sS -o "$tmp" -w '%{http_code}' \
+    --request POST \
     --header "PRIVATE-TOKEN: ${gitlab_token}" \
     --header "Content-Type: application/json" \
     --data "$body" \
-    "${api}/${key}" >/dev/null 2>&1; then
+    "$api")"
+  if [[ "$http_code" =~ ^2 ]]; then
+    rm -f "$tmp"
     return 0
   fi
-  curl -fsS --request POST \
-    --header "PRIVATE-TOKEN: ${gitlab_token}" \
-    --header "Content-Type: application/json" \
-    --data "$body" \
-    "$api" >/dev/null
+  echo "[!] GitLab variable ${key} failed (HTTP ${http_code}):" >&2
+  sed 's/.*/   &/' "$tmp" >&2
+  rm -f "$tmp"
+  return 1
 }
 
 gitlab_admin_token() {
@@ -166,9 +202,6 @@ sync_gitlab_ci_secrets() {
 
   gitlab_ci_upsert_variable "$api" "$gitlab_token" VAULT_READ_TOKEN "$vault_read_token"
   echo "[+] GitLab ${CI_PATH}: variable VAULT_READ_TOKEN"
-
-  gitlab_ci_upsert_variable "$api" "$gitlab_token" GITLAB_TOKEN "$gitlab_token"
-  echo "[+] GitLab ${CI_PATH}: variable GITLAB_TOKEN"
 }
 
 sync_ci_vault_read_token() {

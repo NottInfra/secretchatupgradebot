@@ -7,8 +7,6 @@ cd "$ROOT"
 
 # shellcheck source=../cmd/lib/project.sh
 source "${ROOT}/cmd/lib/project.sh"
-# shellcheck source=../cmd/lib/vault.sh
-source "${ROOT}/cmd/lib/vault.sh"
 # shellcheck source=lib/mono-ci.sh
 source "${ROOT}/release/lib/mono-ci.sh"
 
@@ -44,13 +42,9 @@ run_push() {
   docker push "$IMAGE"
 }
 
-run_vault() {
-  branch_gate
-  vault_materialize "$VAULT_PROJECT" "$ENV_FILE"
-}
-
 run_deploy() {
   branch_gate
+  export IMAGE CONTAINER_NAME HOST_PORT CONTAINER_PORT VAULT_READ_TOKEN
   docker compose -f "$RELEASE_FILE" up -d --force-recreate --remove-orphans
   docker compose -f "$RELEASE_FILE" ps
 }
@@ -60,18 +54,16 @@ case "$step" in
   scan) run_scan ;;
   sonar) run_sonar ;;
   push) run_push ;;
-  vault) run_vault ;;
   deploy) run_deploy ;;
   all)
     run_build
     run_scan
     run_sonar
     run_push
-    run_vault
     run_deploy
     ;;
   *)
-    echo "[!] unknown step: $step (build|scan|sonar|push|vault|deploy|all)" >&2
+    echo "[!] unknown step: $step (build|scan|sonar|push|deploy|all)" >&2
     exit 1
     ;;
 esac

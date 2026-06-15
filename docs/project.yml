@@ -2,7 +2,7 @@
 # Runtime env (AUTH_HOST_BASE, tokens, …) lives in .env.production / .env.test
 # → push with cmd/manual-env-hashicorp-push → Vault secret/{staging}-{project}
 # → optional: script creates ci-read-* token + sets VAULT_READ_TOKEN on GitHub/GitLab
-# → CI materializes Vault → /root/{staging}-{project}.env (same name as secret path)
+# → CI passes VAULT_READ_TOKEN; app initEnv() reads Vault at runtime
 
 project: secretchatonly-bot
 group: null
@@ -25,13 +25,12 @@ remotes:
     release: release/test.yml
 
 # Local source files for manual-env-hashicorp-push (gitignored)
-# test: GITLAB_TOKEN auto-created on CI sync if missing (needs GITLAB_ADMIN_TOKEN in devops mono .env.local)
+# test: GITLAB_TOKEN in .env.test for this script's GitLab API calls (auto-created via GITLAB_ADMIN_TOKEN if missing)
 env:
   live: .env.production
   test: .env.test
 
 # Deploy wiring only — not app secrets
-# Host env: /root/{staging}-{project}.env (e.g. /root/test-secretchatonly-bot.env)
 staging:
   live:
     registry_tag: prod

@@ -7,8 +7,6 @@ cd "$ROOT"
 
 # shellcheck source=../cmd/lib/project.sh
 source "${ROOT}/cmd/lib/project.sh"
-# shellcheck source=../cmd/lib/vault.sh
-source "${ROOT}/cmd/lib/vault.sh"
 # shellcheck source=lib/mono-ci.sh
 source "${ROOT}/release/lib/mono-ci.sh"
 
@@ -37,7 +35,7 @@ run_scan() {
 
 run_deploy() {
   branch_gate
-  vault_materialize "$VAULT_PROJECT" "$ENV_FILE"
+  export IMAGE CONTAINER_NAME HOST_PORT CONTAINER_PORT VAULT_READ_TOKEN
   docker compose -f "$RELEASE_FILE" up -d --force-recreate --remove-orphans
   docker compose -f "$RELEASE_FILE" ps
 }

@@ -1,10 +1,14 @@
-# Test deploy compose — CI sets IMAGE, CONTAINER_NAME, ENV_FILE (/root/test-{project}.env), ports from docs/project.yml
+# Test deploy compose — CI exports IMAGE, CONTAINER_NAME, ports from docs/project.yml.
+# App secrets: initEnv() reads Vault (VAULT_ADDR + VAULT_READ_TOKEN from CI job env).
 
 services:
   app:
     image: ${IMAGE}
     container_name: ${CONTAINER_NAME}
-    env_file: ${ENV_FILE}
+    environment:
+      NODE_ENV: test
+      VAULT_ADDR: http://vault:8200
+      VAULT_READ_TOKEN: ${VAULT_READ_TOKEN}
     ports:
       - "${HOST_PORT}:${CONTAINER_PORT}"
     networks:
