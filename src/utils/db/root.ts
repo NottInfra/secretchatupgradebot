@@ -37,10 +37,15 @@ export class Store {
     const run = async () => {
       switch (query) {
         case "messages.insert": {
-          const [senderId, chatId, createdAt] = args as [string, string, string];
+          const [senderId, chatId, sessionId, createdAt] = args as [
+            string,
+            string,
+            string,
+            string
+          ];
           await this.backing.query(
-            `INSERT INTO messages(sender_id, chat_id, created_at) VALUES ($1, $2, $3::timestamptz)`,
-            [senderId, chatId, createdAt]
+            `INSERT INTO messages(sender_id, chat_id, session_id, created_at) VALUES ($1, $2, $3, $4::timestamptz)`,
+            [senderId, chatId, sessionId, createdAt]
           );
           this.invalidateQueryCache();
           return;
@@ -210,11 +215,15 @@ export class Store {
   private async executeRead<T>(query: string, args: unknown[]): Promise<T> {
     switch (query) {
       case "messages.count_by_sender": {
-        const [senderId, collapseWindowSeconds = 0] = args as [string, number?];
+        const [senderId, sessionId, collapseWindowSeconds = 0] = args as [
+          string,
+          string,
+          number?
+        ];
         if (collapseWindowSeconds <= 0) {
           const rows = await this.backing.query<{ n: string }>(
-            `SELECT COUNT(*)::text AS n FROM messages WHERE sender_id = $1`,
-            [senderId]
+            `SELECT COUNT(*)::text AS n FROM messages WHERE sender_id = $1 AND session_id = $2`,
+            [senderId, sessionId]
           );
           return Number(rows[0]?.n ?? 0) as T;
         }
@@ -225,13 +234,13 @@ export class Store {
                created_at,
                LAG(created_at) OVER (ORDER BY created_at) AS previous_created_at
              FROM messages
-             WHERE sender_id = $1
+             WHERE sender_id = $1 AND session_id = $2
            )
            SELECT COUNT(*)::text AS n
            FROM ordered
            WHERE previous_created_at IS NULL
-              OR created_at - previous_created_at > make_interval(secs => $2)`,
-          [senderId, collapseWindowSeconds]
+              OR created_at - previous_created_at > make_interval(secs => $3)`,
+          [senderId, sessionId, collapseWindowSeconds]
         );
         return Number(rows[0]?.n ?? 0) as T;
       }

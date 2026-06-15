@@ -1,4 +1,5 @@
--- Moderation reset for specific Telegram users
+-- Moderation reset for specific Telegram users (per sender, all moderated accounts).
+-- To reset one owner only, add: AND session_id = 'OWNER_USER_ID'
 
 DO $body$
 DECLARE

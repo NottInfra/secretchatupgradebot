@@ -9,12 +9,19 @@ export class MessageRepository {
       "messages.insert",
       message.senderId,
       message.chatId,
+      message.sessionId,
       message.date.toISOString()
     );
   }
 
-  async countBySender(senderId: string, collapseWindowSeconds = 0): Promise<number> {
-    return this.store.read<number>("messages.count_by_sender", 0, senderId, collapseWindowSeconds);
+  async countBySender(senderId: string, sessionId: string, collapseWindowSeconds = 0): Promise<number> {
+    return this.store.read<number>(
+      "messages.count_by_sender",
+      0,
+      senderId,
+      sessionId,
+      collapseWindowSeconds
+    );
   }
 
   /** Messages from sender within the collapse window ending at `at` (inclusive). */

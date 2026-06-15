@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS messages (
   id BIGSERIAL PRIMARY KEY,
   sender_id TEXT NOT NULL,
   chat_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

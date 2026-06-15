@@ -124,11 +124,19 @@ export class ProcessIncomingMessageUseCase {
     );
 
     const count = await withSpan(moderationTracer, "moderation.load_history", async () =>
-      this.messages.countBySender(message.senderId)
+      this.messages.countBySender(message.senderId, message.sessionId)
     );
 
     const tier: "first_warning" | "second_warning" | "block" =
       count === 1 ? "first_warning" : count === 2 ? "second_warning" : "block";
+
+    this.logger.info("moderation_tier_selected", {
+      senderId: message.senderId,
+      sessionId: message.sessionId,
+      count,
+      tier,
+      priorBlockOtherAccount
+    });
 
     const tierAssignment = await withSpan(moderationTracer, "moderation.assign_tier", async (tierSpan) => {
       setSpanAttributes(tierSpan, { "moderation.tier": tier });
