@@ -1,12 +1,11 @@
 # Live deploy compose — CI exports IMAGE, CONTAINER_NAME, ports from docs/project.yml.
 # App secrets: initEnv() reads Vault (VAULT_ADDR + VAULT_READ_TOKEN from CI job env).
+# DNS: use Docker embedded resolver on mono (127.0.0.11) — do not set dns: adguard (host daemon needs IPs).
 
 services:
   app:
     image: ${IMAGE}
     container_name: ${CONTAINER_NAME}
-    dns:
-      - adguard
     environment:
       NODE_ENV: production
       VAULT_ADDR: http://vault:8200
