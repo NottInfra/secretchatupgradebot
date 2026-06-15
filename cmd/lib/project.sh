@@ -53,6 +53,17 @@ _yaml_section3() {
   ' "$(project_file)"
 }
 
+_yaml_staging_port() {
+  local staging="$1" key="$2"
+  awk -v st="$staging:" -v k="$key" '
+    $0 == "staging:" { on=1; next }
+    on && /^[^ #]/ && !/^  / { exit }
+    on && $0 == "  " st { ch=1; next }
+    on && ch && /^  [^ ]/ && $0 != "  " st { ch=0 }
+    on && ch && /^      / && $1 == k ":" { print $2; exit }
+  ' "$(project_file)"
+}
+
 _yaml_remote() {
   local staging="$1" key="$2"
   awk -v s="  ${staging}:" -v k="$key" '
@@ -98,14 +109,10 @@ project_yaml_get() {
     env.live) _yaml_env_file live ;;
     env.test) _yaml_env_file test ;;
     staging.live.registry_tag) _yaml_section3 staging live registry_tag ;;
-    staging.live.ports.host)
-      awk '/^  live:/{l=1} l&&/^  test:/{exit} l&&/^      host:/{print $2;exit}' "$(project_file)" ;;
-    staging.live.ports.container)
-      awk '/^  live:/{l=1} l&&/^  test:/{exit} l&&/^      container:/{print $2;exit}' "$(project_file)" ;;
-    staging.test.ports.host)
-      awk '/^  test:/{t=1} t&&/^[^ #]/&&!/^  /{exit} t&&/^      host:/{print $2;exit}' "$(project_file)" ;;
-    staging.test.ports.container)
-      awk '/^  test:/{t=1} t&&/^[^ #]/&&!/^  /{exit} t&&/^      container:/{print $2;exit}' "$(project_file)" ;;
+    staging.live.ports.host) _yaml_staging_port live host ;;
+    staging.live.ports.container) _yaml_staging_port live container ;;
+    staging.test.ports.host) _yaml_staging_port test host ;;
+    staging.test.ports.container) _yaml_staging_port test container ;;
     staging.test.registry_tag) _yaml_section3 staging test registry_tag ;;
     *) echo "[!] unknown project key: $path" >&2; return 1 ;;
   esac
