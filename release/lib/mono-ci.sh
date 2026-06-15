@@ -47,7 +47,10 @@ mono_sonar_scan() {
     -Dsonar.projectKey="$project_key"
     -Dsonar.sources="$sources"
     -Dsonar.typescript.tsconfigPath=tsconfig.json
-    -Dsonar.exclusions=**/node_modules/**,**/dist/**
+    -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/*.test.ts
+    -Dsonar.tests="$sources"
+    -Dsonar.test.inclusions=**/*.test.ts
+    -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
   )
 
   if command -v sonar-scanner >/dev/null 2>&1; then

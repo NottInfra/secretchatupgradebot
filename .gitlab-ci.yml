@@ -33,11 +33,25 @@ trivy:
   script:
     - bash ./release/test.sh scan
 
+unit-test:
+  stage: scan
+  image: node:22-alpine
+  tags: [self-hosted, test]
+  needs: [build]
+  <<: *build_rules
+  script:
+    - npm ci
+    - npm run test:coverage
+  artifacts:
+    paths:
+      - coverage/
+    expire_in: 1 day
+
 sonar:
   stage: sonar
   image: sonarsource/sonar-scanner-cli:11.5
   tags: [self-hosted, test]
-  needs: [build]
+  needs: [build, unit-test]
   <<: *build_rules
   variables:
     SONAR_HOST_URL: http://sonarqube:9000

@@ -7,7 +7,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/root.js",
     "dev": "NODE_ENV=development tsx watch src/root.ts",
-    "ops:create-db": "tsx src/zz-ops/create-db.ts"
+    "ops:create-db": "tsx src/zz-ops/create-db.ts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@aws-sdk/rds-signer": "^3.917.0",
@@ -37,7 +39,9 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.20.0",
+    "@vitest/coverage-v8": "^3.2.4",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
   }
 }

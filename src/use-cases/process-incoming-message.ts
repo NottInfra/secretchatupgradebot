@@ -3,7 +3,8 @@ import { MessageRepository } from "../repositories/message-repository.js";
 import { InboundMessageDedupe } from "../services/inbound-message-dedupe.js";
 import { ClientNotificationService } from "../services/client-notification-service.js";
 import { ExperimentService, type Assignment } from "../services/experiment-service.js";
-import { IncomingMessage, ModerationDecision } from "../types.js";
+import type { IncomingMessage, ModerationDecision } from "../types.js";
+import { decisionForTier, moderationTierForCount, type ModerationTier } from "../utils/moderation-tier.js";
 import { Analytics } from "../utils/analytics.js";
 import { Logger } from "../utils/logger.js";
 import { resolveOutboundPeer } from "../services/telegram/resolve-outbound-peer.js";
@@ -24,24 +25,6 @@ const telegramTracer = getTracer("telegram");
 const LEVEL1_WARNING_EXPERIMENT_ID = "level1_message_warning";
 const LEVEL2_WARNING_FINAL_EXPERIMENT_ID = "level2_message_warning_final";
 const LEVEL3_BLOCK_EXPERIMENT_ID = "level3_messages_block";
-
-type ModerationTier = "first_warning" | "second_warning" | "block";
-
-function moderationTierForCount(count: number): ModerationTier {
-  if (count === 1) return "first_warning";
-  if (count === 2) return "second_warning";
-  return "block";
-}
-
-function decisionForTier(tier: ModerationTier): ModerationDecision {
-  if (tier === "block") {
-    return { action: "block", confidence: 1, reason: "third_or_later_message_auto_block" };
-  }
-  if (tier === "second_warning") {
-    return { action: "allow", confidence: 1, reason: "second_message_warning_sent" };
-  }
-  return { action: "allow", confidence: 1, reason: "first_message_reply_sent" };
-}
 
 export class ProcessIncomingMessageUseCase {
   private readonly sessionUsernameByClient = new WeakMap<TelegramClient, string>();
