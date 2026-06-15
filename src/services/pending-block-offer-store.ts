@@ -8,6 +8,7 @@ export type PendingBlockOffer = {
   businessConnectionId?: string;
   telegramMessageId?: number;
   sessionOwnerUsername?: string;
+  senderUsername?: string;
   experimentId: string;
   variantId: string;
   createdAt: number;
@@ -33,6 +34,7 @@ export class PendingBlockOfferStore {
       businessConnectionId: message.businessConnectionId,
       telegramMessageId: message.telegramMessageId,
       sessionOwnerUsername: message.sessionOwnerUsername,
+      senderUsername: message.senderUsername,
       experimentId,
       variantId,
       createdAt: Date.now()

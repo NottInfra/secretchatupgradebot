@@ -7,6 +7,7 @@ import { IncomingMessage, ModerationDecision } from "../types.js";
 import { Analytics } from "../utils/analytics.js";
 import { Logger } from "../utils/logger.js";
 import { resolveOutboundPeer } from "../services/telegram/resolve-outbound-peer.js";
+import { formatSenderRefHtml } from "../services/telegram/format-sender-ref.js";
 import type { TelegramClient } from "telegram";
 import type { MtprotoSessionService } from "../bg-services/mtproto-session-service.js";
 import { ActionQueueService } from "../bg-services/action-queue-service.js";
@@ -237,9 +238,7 @@ export class ProcessIncomingMessageUseCase {
           moderationIncoming: message
         });
       }
-      const senderRef = message.senderUsername?.trim()
-        ? `@${this.escapeHtml(message.senderUsername.trim())}`
-        : `User ID ${this.escapeHtml(message.senderId)}`;
+      const senderRef = formatSenderRefHtml(message.senderId, message.senderUsername);
       const noticeHtml = `We just blocked ${senderRef}. Please unblock them if you'd like any further interaction.`;
       const sentViaBot = await this.notifications.sendHTML(message.sessionId, noticeHtml);
       this.analytics.trackEvent("block_notice_sent", {

@@ -4,6 +4,7 @@ import type { ClientNotificationService } from "../services/client-notification-
 import type { ExperimentService } from "../services/experiment-service.js";
 import type { PendingBlockOfferStore } from "../services/pending-block-offer-store.js";
 import type { IncomingMessage } from "../types.js";
+import { formatSenderRefHtml } from "../services/telegram/format-sender-ref.js";
 import type { Analytics } from "../utils/analytics.js";
 import type { Logger } from "../utils/logger.js";
 import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
@@ -109,10 +110,10 @@ export class HandleOwnerBlockCallbackUseCase {
         chatId: offer.chatId
       });
 
-      const senderRef = offer.senderId;
+      const senderRef = formatSenderRefHtml(offer.senderId, offer.senderUsername);
       await this.notifications.sendHTML(
         offer.ownerUserId,
-        `Blocked user ID ${senderRef} on your account. Unblock them in Telegram if you want further contact.`
+        `Blocked ${senderRef} on your account. Unblock them in Telegram if you want further contact.`
       );
 
       return "Sender blocked on your account.";

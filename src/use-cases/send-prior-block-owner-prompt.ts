@@ -1,6 +1,7 @@
 import type { Assignment } from "../services/experiment-service.js";
 import type { PendingBlockOfferStore } from "../services/pending-block-offer-store.js";
 import type { ClientNotificationService } from "../services/client-notification-service.js";
+import { formatSenderRefHtml } from "../services/telegram/format-sender-ref.js";
 import type { IncomingMessage } from "../types.js";
 import type { Analytics } from "../utils/analytics.js";
 import type { Logger } from "../utils/logger.js";
@@ -27,9 +28,7 @@ export class SendPriorBlockOwnerPromptUseCase {
           "telegram.chat_id": message.chatId
         });
 
-        const senderRef = message.senderUsername?.trim()
-          ? `@${message.senderUsername.trim()}`
-          : `user ID ${message.senderId}`;
+        const senderRef = formatSenderRefHtml(message.senderId, message.senderUsername);
 
         const token = this.offers.create(
           message,
