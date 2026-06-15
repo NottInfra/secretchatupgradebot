@@ -18,6 +18,7 @@ mono_trivy_scan() {
     -v /var/run/docker.sock:/var/run/docker.sock \
     "$cli" image \
     --server "$server" \
+    --scanners vuln \
     --severity HIGH,CRITICAL \
     --exit-code 1 \
     "$image"

@@ -18,6 +18,10 @@
     "telegram": "^2.26.22",
     "zod": "^4.3.6"
   },
+  "overrides": {
+    "fast-xml-builder": "1.1.7",
+    "picomatch": "4.0.4"
+  },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
