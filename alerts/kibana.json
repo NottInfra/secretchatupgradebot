@@ -1,0 +1,94 @@
+[
+  {
+    "id": "f8a3c2d1-4b5e-4a6f-9c8d-1e2f3a4b5c6d",
+    "name": "secretchatonly-bot analytics onboarding failed spike",
+    "tags": ["secretchatonly-bot", "analytics"],
+    "rule_type_id": ".es-query",
+    "consumer": "stackAlerts",
+    "schedule": { "interval": "1m" },
+    "enabled": true,
+    "notify_when": "onActionGroupChange",
+    "params": {
+      "searchType": "esQuery",
+      "index": ["secretchatonly-bot-analytics"],
+      "timeField": "@timestamp",
+      "esQuery": "{\"query\":{\"query_string\":{\"query\":\"event: \\\"onboarding_failed\\\"\"}}}",
+      "threshold": [5],
+      "thresholdComparator": ">",
+      "timeWindowSize": 15,
+      "timeWindowUnit": "m",
+      "size": 100,
+      "groupBy": "all"
+    },
+    "actions": []
+  },
+  {
+    "id": "e7b8c9d1-1e2f-4a4b-8c6d-7e8f9a0b1c2e",
+    "name": "secretchatonly-bot analytics no moderation decisions",
+    "tags": ["secretchatonly-bot", "analytics"],
+    "rule_type_id": ".es-query",
+    "consumer": "stackAlerts",
+    "schedule": { "interval": "5m" },
+    "enabled": true,
+    "notify_when": "onActionGroupChange",
+    "params": {
+      "searchType": "esQuery",
+      "index": ["secretchatonly-bot-analytics"],
+      "timeField": "@timestamp",
+      "esQuery": "{\"query\":{\"query_string\":{\"query\":\"event: \\\"moderation_decision\\\" AND deployment.environment: \\\"__ENV__\\\"\"}}}",
+      "threshold": [1],
+      "thresholdComparator": "<",
+      "timeWindowSize": 2,
+      "timeWindowUnit": "h",
+      "size": 100,
+      "groupBy": "all"
+    },
+    "actions": []
+  },
+  {
+    "id": "b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e",
+    "name": "secretchatonly-bot ops error rate high",
+    "tags": ["secretchatonly-bot", "ops"],
+    "rule_type_id": ".es-query",
+    "consumer": "stackAlerts",
+    "schedule": { "interval": "1m" },
+    "enabled": true,
+    "notify_when": "onActionGroupChange",
+    "params": {
+      "searchType": "esQuery",
+      "index": ["filebeat-*"],
+      "timeField": "@timestamp",
+      "esQuery": "{\"query\":{\"query_string\":{\"query\":\"level: \\\"error\\\" AND container.name: *secretchatonly*\"}}}",
+      "threshold": [10],
+      "thresholdComparator": ">",
+      "timeWindowSize": 5,
+      "timeWindowUnit": "m",
+      "size": 100,
+      "groupBy": "all"
+    },
+    "actions": []
+  },
+  {
+    "id": "c2d3e4f5-a6b7-4c8d-9e0f-1a2b3c4d5e6f",
+    "name": "secretchatonly-bot ops action queue failed",
+    "tags": ["secretchatonly-bot", "ops"],
+    "rule_type_id": ".es-query",
+    "consumer": "stackAlerts",
+    "schedule": { "interval": "1m" },
+    "enabled": true,
+    "notify_when": "onActionGroupChange",
+    "params": {
+      "searchType": "esQuery",
+      "index": ["filebeat-*"],
+      "timeField": "@timestamp",
+      "esQuery": "{\"query\":{\"query_string\":{\"query\":\"message: \\\"action_queue_task_failed\\\" AND container.name: *secretchatonly*\"}}}",
+      "threshold": [0],
+      "thresholdComparator": ">",
+      "timeWindowSize": 5,
+      "timeWindowUnit": "m",
+      "size": 100,
+      "groupBy": "all"
+    },
+    "actions": []
+  }
+]

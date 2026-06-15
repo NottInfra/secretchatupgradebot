@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Apply alert rules: Kibana + Grafana provisioning.
+# Prompts live/test → sets ALERTS_ENV (production | test).
+# From laptop: ./cmd/apply-alerts --on-mono
+# On mono host: ./cmd/apply-alerts
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[[ -n "$ROOT" ]] || ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+# shellcheck source=lib/project.sh
+source "${ROOT}/cmd/lib/project.sh"
+# shellcheck source=lib/observability.sh
+source "${ROOT}/cmd/lib/observability.sh"
+
+[[ -f "$(project_file)" ]] || { echo "[!] Missing docs/project.yml"; exit 1; }
+[[ -f "${ROOT}/alerts/kibana.json" ]] || { echo "[!] Missing alerts/kibana.json"; exit 1; }
+[[ -f "${ROOT}/alerts/grafana.json" ]] || { echo "[!] Missing alerts/grafana.json"; exit 1; }
+
+ON_MONO=0
+for arg in "$@"; do
+  [[ "$arg" == "--on-mono" ]] && ON_MONO=1
+done
+
+observability_choose_staging
+
+if [[ "$ON_MONO" == 1 ]]; then
+  echo "[+] Applying alerts on mono via SSH (ALERTS_ENV=$ALERTS_ENV)"
+  observability_run_on_mono "$ROOT" alerts || {
+    echo "[!] apply-alerts --on-mono failed (see output above)" >&2
+    exit 1
+  }
+else
+  echo "[+] Applying alerts locally (ALERTS_ENV=$ALERTS_ENV)"
+  observability_apply_alerts "$ROOT"
+fi
+
+echo "[+] Done — alerts (ALERTS_ENV=$ALERTS_ENV)"

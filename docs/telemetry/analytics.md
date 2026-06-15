@@ -12,7 +12,7 @@ Each event is exported to **Mimir metrics** today. Ops logs (including some even
 
 Counter in Mimir: `analytics_events_total` with labels `event`, prop attributes (stringified), `deployment_environment` (from `NODE_ENV`, e.g. `test`).
 
-The Kibana analytics dashboard reads data stream **`secretchatonly-bot-analytics`**, which today only has the bootstrap doc from `./cmd/define-elasticsearch`. **`moderation_toggled` will not appear there** until analytics documents are exported to ES (collector/app change). It **does** appear in container logs and, after ~60s, in Grafana if OTEL reaches Mimir.
+The Kibana analytics dashboard reads data stream **`secretchatonly-bot-analytics`**, which today only has the bootstrap doc from `./cmd/apply-dashboards`. **`moderation_toggled` will not appear there** until analytics documents are exported to ES (collector/app change). It **does** appear in container logs and, after ~60s, in Grafana if OTEL reaches Mimir.
 
 ### Elasticsearch document shape
 

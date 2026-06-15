@@ -205,6 +205,28 @@ project_load_staging() {
   ENV_SOURCE="$(project_yaml_get "env.${staging}")"
 }
 
+# Source docs/project.yml env.{live,test} file (+ optional .env.local override).
+project_source_staging_env() {
+  local staging="${1:-${STAGING:-}}"
+  [[ -n "$staging" ]] || { echo "[!] project_source_staging_env: staging required" >&2; return 1; }
+  staging="$(project_normalize_staging "$staging")"
+  local root f local_f
+  root="$(project_root)"
+  f="$(project_yaml_get "env.${staging}")"
+  [[ -n "$f" && "$f" != "null" ]] || { echo "[!] No env file for staging $staging in project.yml" >&2; return 1; }
+  [[ "$f" == /* ]] || f="${root}/${f}"
+  [[ -f "$f" ]] || { echo "[!] Missing env file: $f" >&2; return 1; }
+  set -a
+  # shellcheck disable=SC1090
+  source "$f"
+  local_f="${root}/.env.local"
+  if [[ -f "$local_f" ]]; then
+    # shellcheck disable=SC1090
+    source "$local_f"
+  fi
+  set +a
+}
+
 project_export_staging() {
   local staging="${1:?}" fmt="${2:-shell}"
   project_load_staging "$staging"

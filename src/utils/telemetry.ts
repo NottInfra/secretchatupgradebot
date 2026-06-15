@@ -145,7 +145,8 @@ export async function withSpan<T>(
 
 export function recordAnalyticsMetric(name: string, props: Record<string, unknown>): void {
   if (!analyticsCounter) return;
-  analyticsCounter.add(1, { event: name, ...attrProps(props) });
+  const deployment_environment = process.env.NODE_ENV?.trim() || "development";
+  analyticsCounter.add(1, { event: name, deployment_environment, ...attrProps(props) });
 }
 
 export function recordAnalyticsEvent(name: string, props: Record<string, unknown>): void {

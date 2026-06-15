@@ -1,6 +1,6 @@
 # Project manifest — remotes, deploy wiring (committed; no secrets).
-# Runtime env (AUTH_HOST_BASE, tokens, …) lives in .env.production / .env.test
-# → push with cmd/manual-env-hashicorp-push → Vault secret/{staging}-{project}
+# Runtime env (AUTH_HOST_BASE, tokens, observability creds, …) lives in .env.production / .env.test
+# → push with cmd/apply-env-file-hashicorp → Vault secret/{staging}-{project}
 # → optional: script creates ci-read-* token + sets VAULT_READ_TOKEN on GitHub/GitLab
 # → CI passes VAULT_READ_TOKEN; app initEnv() reads Vault at runtime
 
@@ -25,7 +25,7 @@ remotes:
     branch: develop
     release: release/test.yml
 
-# Local source files for manual-env-hashicorp-push (gitignored)
+# Local source files for apply-env-file-hashicorp (gitignored)
 # test: GITLAB_TOKEN in .env.test for this script's GitLab API calls (auto-created via GITLAB_ADMIN_TOKEN if missing)
 env:
   live: .env.production

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Manual push: local env files → Vault (dev over NetBird).
+# Push local .env.{test,production} → Vault (dev over NetBird).
 # VAULT_ADDR + VAULT_TOKEN: export, or read from ../devops/servers/mono/.env(.local)
 set -euo pipefail
 

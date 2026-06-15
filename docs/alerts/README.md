@@ -1,50 +1,49 @@
 # Alerts
 
-Alert rule definitions for **secretchatonly-bot**, grouped by platform. Source files live in [alerts/](../../alerts/). Applied on mono separately from app deploy (same pattern as [dashboards/](../../dashboards/)).
+Alert rule definitions for **secretchatonly-bot**. Source files in [alerts/](../../alerts/). Applied via `./cmd/apply-alerts` (API upsert — no file drop or reload).
+
+| File | Platform | API |
+|------|----------|-----|
+| `grafana.json` | Grafana / Mimir | `PUT /api/v1/provisioning/alert-rules/{uid}` |
+| `kibana.json` | Kibana / Elasticsearch | `POST/PUT /api/alerting/rule/{id}` |
 
 ## Grafana (Mimir)
 
-File: [alerts/grafana.yaml](../../alerts/grafana.yaml)
+Rules appear under folder **secretchatonly-bot** in Grafana → Alerting → Alert rules.
 
 | Rule | PromQL / condition | Severity | When |
 |------|-------------------|----------|------|
-| `onboarding_failures_high` | `sum(rate(analytics_events_total{event="onboarding_failed"}[15m])) > 0.1` | warning | Onboarding auth failing repeatedly |
-| `no_analytics_events` | `absent(analytics_events_total{deployment_environment="test"})` for 20m | critical | Telemetry or app likely down (per env) |
-| `moderation_decisions_drop` | `sum(rate(analytics_events_total{event="moderation_decision"}[1h])) == 0` and business hours | warning | Automation path may be broken |
-| `block_queue_stalled` | `increase(analytics_events_total{event="sender_block_queued"}[1h]) > 0` and no `sender_blocked` logs in 30m | warning | Block queue not draining |
+| `scb-onboarding-failures-high` | `sum(rate(analytics_events_total{event="onboarding_failed"}[15m])) > 0.05` | warning | Onboarding auth failing repeatedly |
+| `scb-no-analytics-events-{env}` | zero `analytics_events_total` rate for 20m | critical | Telemetry or app likely down |
+| `scb-moderation-decisions-absent-{env}` | no `moderation_decision` events in 2h | warning | Business automation not ingesting |
 
-Datasource: Mimir (`uid: mimir`). Folder on mono: `secretchatonly-bot`.
-
-Duplicate `no_analytics_events` for `deployment_environment="production"` when live track is active.
+Datasource: Mimir (`uid: mimir`). `__ENV__` in `grafana.json` is patched to `test` or `production` at apply time.
 
 ## Kibana (Elasticsearch)
 
-File: [alerts/kibana.ndjson](../../alerts/kibana.ndjson)
+Run **`./cmd/apply-dashboards`** first if the analytics index is not bootstrapped.
 
-### Analytics index (`secretchatonly-bot-analytics-*`)
-
-Uses dynamic mapping on mono — run **`cmd/define-elasticsearch`** before import ([assets/elasticsearch/analytics-index-template.json](../../assets/elasticsearch/analytics-index-template.json)).
+### Analytics index (`secretchatonly-bot-analytics`)
 
 | Rule | Query | When |
 |------|-------|------|
-| `analytics_onboarding_failed_spike` | `event: "onboarding_failed"` count > 5 in 15m | Auth flow broken |
-| `analytics_no_moderation_decisions` | no `event: "moderation_decision"` in 2h (test env) | Business automation not ingesting |
-| `analytics_block_without_notice` | `sender_block_queued` without nearby `block_notice_sent` | Block pipeline partial failure |
+| onboarding failed spike | `event: "onboarding_failed"` count > 5 in 15m | Auth flow broken |
+| no moderation decisions | no `moderation_decision` in 2h (per env) | Business automation not ingesting |
 
-### Ops logs index (container stdout via Filebeat)
+### Ops logs (`filebeat-*`)
 
 | Rule | Query | When |
 |------|-------|------|
-| `ops_error_rate_high` | `level: "error"` and `message` matches `secretchatonly-bot` container > 10 in 5m | Runtime errors |
-| `ops_mgmt_bot_launch_failed` | `message: "mgmt_bot_launch_failed"` | Bot API path down |
-| `ops_action_queue_task_failed` | `message: "action_queue_task_failed"` | Moderation action failures |
-
-Ops log rules use the Filebeat container index pattern on mono (not the analytics index).
+| ops error rate high | `level: "error"` + `container.name: *secretchatonly*` > 10 in 5m | Runtime errors |
+| ops action queue failed | `message: "action_queue_task_failed"` | Moderation action failures |
 
 ## Applying
 
-1. Import or provision from `alerts/grafana.yaml` and `alerts/kibana.ndjson`.
-2. Set notification channels on mono (Slack, email, PagerDuty) in Grafana/Kibana UI — not stored in this repo.
-3. Tune thresholds per environment after first week of baseline traffic.
+```bash
+./cmd/apply-alerts --on-mono   # from laptop
+./cmd/apply-alerts             # on mono host
+```
 
-See also [analytics.md](../telemetry/analytics.md) for event catalog and [logging.md](../telemetry/logging.md) for ops log keys.
+Set notification channels on mono (Slack, email, PagerDuty) in Grafana/Kibana UI — not stored in this repo.
+
+See also [analytics.md](../telemetry/analytics.md) and [logging.md](../telemetry/logging.md).

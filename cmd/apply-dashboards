@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Apply dashboards: Elasticsearch template + Kibana + Grafana.
+# Prompts live/test → sets DASHBOARD_ENV (production | test).
+# From laptop: ./cmd/apply-dashboards --on-mono
+# On mono host: ./cmd/apply-dashboards
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[[ -n "$ROOT" ]] || ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+# shellcheck source=lib/project.sh
+source "${ROOT}/cmd/lib/project.sh"
+# shellcheck source=lib/observability.sh
+source "${ROOT}/cmd/lib/observability.sh"
+
+[[ -f "$(project_file)" ]] || { echo "[!] Missing docs/project.yml"; exit 1; }
+[[ -f "${ROOT}/dashboards/kibana.ndjson" ]] || { echo "[!] Missing dashboards/kibana.ndjson"; exit 1; }
+[[ -f "${ROOT}/dashboards/grafana.json" ]] || { echo "[!] Missing dashboards/grafana.json"; exit 1; }
+
+ON_MONO=0
+for arg in "$@"; do
+  [[ "$arg" == "--on-mono" ]] && ON_MONO=1
+done
+
+observability_choose_staging
+
+if [[ "$ON_MONO" == 1 ]]; then
+  echo "[+] Applying dashboards on mono via SSH (DASHBOARD_ENV=$DASHBOARD_ENV)"
+  observability_run_on_mono "$ROOT" dashboards || {
+    echo "[!] apply-dashboards --on-mono failed (see output above)" >&2
+    exit 1
+  }
+else
+  echo "[+] Applying dashboards locally (DASHBOARD_ENV=$DASHBOARD_ENV)"
+  observability_apply_dashboards "$ROOT"
+fi
+
+echo "[+] Done — dashboards (DASHBOARD_ENV=$DASHBOARD_ENV)"

@@ -1,0 +1,181 @@
+{
+  "folder": {
+    "uid": "secretchatonly-bot",
+    "title": "secretchatonly-bot"
+  },
+  "rules": [
+    {
+      "uid": "scb-onboarding-failures-high",
+      "title": "secretchatonly-bot onboarding failures high",
+      "ruleGroup": "secretchatonly-bot",
+      "folderUID": "secretchatonly-bot",
+      "orgID": 1,
+      "condition": "C",
+      "for": "5m",
+      "noDataState": "OK",
+      "execErrState": "Alerting",
+      "annotations": {
+        "summary": "Onboarding failure rate elevated",
+        "description": "analytics_events_total{event=\"onboarding_failed\"} rate > 0.05/s over 15m"
+      },
+      "labels": {
+        "service": "secretchatonly-bot",
+        "severity": "warning"
+      },
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": { "from": 900, "to": 0 },
+          "datasourceUid": "mimir",
+          "model": {
+            "expr": "sum(rate(analytics_events_total{event=\"onboarding_failed\"}[15m]))",
+            "refId": "A"
+          }
+        },
+        {
+          "refId": "B",
+          "datasourceUid": "__expr__",
+          "model": {
+            "type": "reduce",
+            "expression": "A",
+            "reducer": "last",
+            "refId": "B"
+          }
+        },
+        {
+          "refId": "C",
+          "datasourceUid": "__expr__",
+          "model": {
+            "type": "threshold",
+            "expression": "B",
+            "refId": "C",
+            "conditions": [
+              {
+                "evaluator": { "type": "gt", "params": [0.05] },
+                "operator": { "type": "and" },
+                "reducer": { "type": "last" },
+                "type": "query"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "uid": "scb-no-analytics-events-__ENV__",
+      "title": "secretchatonly-bot no analytics events (__ENV__)",
+      "ruleGroup": "secretchatonly-bot",
+      "folderUID": "secretchatonly-bot",
+      "orgID": 1,
+      "condition": "C",
+      "for": "20m",
+      "noDataState": "Alerting",
+      "execErrState": "Alerting",
+      "annotations": {
+        "summary": "No analytics events from __ENV__ deploy",
+        "description": "Zero analytics_events_total rate for 20m — app or OTEL pipeline may be down"
+      },
+      "labels": {
+        "service": "secretchatonly-bot",
+        "environment": "__ENV__",
+        "severity": "critical"
+      },
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": { "from": 1200, "to": 0 },
+          "datasourceUid": "mimir",
+          "model": {
+            "expr": "sum(rate(analytics_events_total{deployment_environment=\"__ENV__\"}[5m]))",
+            "refId": "A"
+          }
+        },
+        {
+          "refId": "B",
+          "datasourceUid": "__expr__",
+          "model": {
+            "type": "reduce",
+            "expression": "A",
+            "reducer": "last",
+            "refId": "B"
+          }
+        },
+        {
+          "refId": "C",
+          "datasourceUid": "__expr__",
+          "model": {
+            "type": "threshold",
+            "expression": "B",
+            "refId": "C",
+            "conditions": [
+              {
+                "evaluator": { "type": "lte", "params": [0] },
+                "operator": { "type": "and" },
+                "reducer": { "type": "last" },
+                "type": "query"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "uid": "scb-moderation-decisions-absent-__ENV__",
+      "title": "secretchatonly-bot no moderation decisions (__ENV__)",
+      "ruleGroup": "secretchatonly-bot",
+      "folderUID": "secretchatonly-bot",
+      "orgID": 1,
+      "condition": "C",
+      "for": "2h",
+      "noDataState": "OK",
+      "execErrState": "Alerting",
+      "annotations": {
+        "summary": "No moderation decisions in 2h",
+        "description": "Business automation path may not be receiving DMs"
+      },
+      "labels": {
+        "service": "secretchatonly-bot",
+        "environment": "__ENV__",
+        "severity": "warning"
+      },
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": { "from": 7200, "to": 0 },
+          "datasourceUid": "mimir",
+          "model": {
+            "expr": "sum(increase(analytics_events_total{event=\"moderation_decision\",deployment_environment=\"__ENV__\"}[2h]))",
+            "refId": "A"
+          }
+        },
+        {
+          "refId": "B",
+          "datasourceUid": "__expr__",
+          "model": {
+            "type": "reduce",
+            "expression": "A",
+            "reducer": "last",
+            "refId": "B"
+          }
+        },
+        {
+          "refId": "C",
+          "datasourceUid": "__expr__",
+          "model": {
+            "type": "threshold",
+            "expression": "B",
+            "refId": "C",
+            "conditions": [
+              {
+                "evaluator": { "type": "lte", "params": [0] },
+                "operator": { "type": "and" },
+                "reducer": { "type": "last" },
+                "type": "query"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
