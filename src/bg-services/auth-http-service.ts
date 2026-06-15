@@ -3,6 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { AuthChallengeService } from "../services/auth-challenge-service.js";
 import { Logger } from "../utils/logger.js";
+import { getTracer, setSpanAttributes } from "../utils/telemetry.js";
+
+const authTracer = getTracer("auth");
 
 export class AuthHttpService {
   private readonly app = express();
@@ -15,6 +18,17 @@ export class AuthHttpService {
     private readonly logger: Logger
   ) {
     this.app.use(express.urlencoded({ extended: false }));
+
+    this.app.use((req, res, next) => {
+      authTracer.startActiveSpan("auth_http.request", (span) => {
+        setSpanAttributes(span, { "http.method": req.method, "http.route": req.path });
+        res.on("finish", () => {
+          span.setAttribute("http.status_code", res.statusCode);
+          span.end();
+        });
+        next();
+      });
+    });
 
     this.app.get("/auth/:token", (req, res) => {
       const token = req.params.token;

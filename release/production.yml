@@ -11,6 +11,8 @@ services:
       VAULT_ADDR: http://vault:8200
       VAULT_READ_TOKEN: ${VAULT_READ_TOKEN}
       TELEGRAM_SOCKS_PROXY: socks5h://whonix-socks-front:9050
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: secretchatonly-bot
     ports:
       - "${HOST_PORT}:${CONTAINER_PORT}"
     networks:

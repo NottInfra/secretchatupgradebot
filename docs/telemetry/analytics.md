@@ -1,12 +1,42 @@
-# MTProto Moderator analytics (`analytics_events`)
+# secretchatonly-bot analytics
 
-Telemetry is written through `Analytics.trackEvent(...)` in `src/utils/analytics.ts` and persisted via store query `analytics.insert`.
+Business telemetry via `Analytics.trackEvent(...)` in `src/utils/analytics.ts`.
 
-Storage shape in JSON DB:
+Each event is exported twice on mono (different backends, different questions):
 
-- `event`
-- `props` (object)
-- `createdAt` (ISO timestamp)
+| Destination | Path | Question it answers | UI |
+|-------------|------|---------------------|-----|
+| **Mimir** | App → OTLP `/v1/metrics` → otel-collector → Mimir | How many? What rate? Per `event` label? | Grafana — [dashboards/grafana.json](../../dashboards/grafana.json) |
+| **Elasticsearch** | App → OTLP → otel-collector → Elasticsearch index | What happened? Search by `senderId`, `tier`, `experiment`? | Kibana — [dashboards/kibana.ndjson](../../dashboards/kibana.ndjson) |
+
+Counter in Mimir: `analytics_events_total` with labels `event`, prop attributes (stringified), `deployment_environment`.
+
+Documents in Elasticsearch data stream: **`secretchatonly-bot-analytics`** (pattern `secretchatonly-bot-analytics-*` in Kibana).
+
+### Elasticsearch document shape
+
+One document per `trackEvent` (collector-side export from OTEL; provisioned on mono):
+
+```json
+{
+  "@timestamp": "2026-06-13T12:00:00.000Z",
+  "service.name": "secretchatonly-bot",
+  "deployment.environment": "test",
+  "event": "moderation_decision",
+  "senderId": "123456789",
+  "chatId": "987654321",
+  "tier": "first_warning",
+  "action": "allow",
+  "experiment": "level1_message_warning",
+  "variant": "v2"
+}
+```
+
+Props from the event catalog are flattened as top-level fields where possible. `event` is always present.
+
+This is **not** the ops log index (Filebeat container stdout). Ops logs are separate — see [logging.md](logging.md). Alerts: [docs/alerts/README.md](../alerts/README.md).
+
+No Postgres table. See [tracing.md](tracing.md) for workflow spans (Tempo).
 
 ## Event catalog
 
@@ -104,32 +134,34 @@ Storage shape in JSON DB:
 
 For moderation steps, tiers use **`assignModerationTier`**, which hashes `moderation_flow_2026_05:${senderId}` and takes `digest % totalWeight` for each manifest. Tier 2 and tier 3 both use total weight 2, so the **same variant id** is chosen for the final warning and the block message for a given sender. Tier 1 uses total weight 4 (four first-warning variants).
 
-Volume by tier (each step records its own `experiment` id):
+### Query examples
 
-```sql
-SELECT
-  event,
-  props_json->>'experiment' AS experiment,
-  props_json->>'variant'   AS variant,
-  COUNT(*) AS n
-FROM analytics_events
-WHERE event IN (
-  'first_message_reply_sent',
-  'second_message_warning_sent',
-  'sender_block_queued'
+**Grafana (Mimir)** — volume by tier:
+
+```promql
+sum by (event, experiment, variant) (
+  increase(analytics_events_total{event=~"first_message_reply_sent|second_message_warning_sent|sender_block_queued"}[7d])
 )
-GROUP BY 1, 2, 3
-ORDER BY 2, 3, 1;
 ```
 
-Skip visibility (shows chat-scoped ignore rows that still log a moderation decision):
+**Kibana (Elasticsearch)** — moderation decisions by tier:
+
+```
+event: "moderation_decision" AND deployment.environment: "test"
+```
+
+Aggregate on `tier.keyword`, `experiment.keyword`, `variant.keyword`.
+
+**Kibana** — onboarding funnel:
+
+```
+event: (onboarding_start OR onboarding_completed OR onboarding_failed)
+```
+
+Skip visibility (Postgres `action_logs`, not analytics index):
 
 ```sql
-SELECT
-  created_at,
-  sender_id,
-  chat_id,
-  decision_json
+SELECT created_at, sender_id, chat_id, decision_json
 FROM action_logs
 WHERE decision_json->>'action' = 'ignore'
   AND decision_json->>'reason' = 'prior_block_in_chat_skip'
@@ -139,11 +171,11 @@ LIMIT 200;
 
 ## Chat automation (Bot API) vs MTProto
 
-- **Ingest:** `src/routes/bot.ts` runs `ChatAutomationController` first. Updates that carry `business_message` or `message.business_connection_id` are treated as inbound mail for a connected account ([Bot API BusinessConnection](https://core.telegram.org/bots/api#getbusinessconnection) / Telegram’s profile automation rollout). The owner user id from `getBusinessConnection` must match an onboarded row in `sessions`.
-- **Act:** Warnings and block DMs go through the management bot (`business_connection_id`). **`contacts.Block`** uses a **lazy** GramJS connection loaded from `sessions.session_string` on demand (`MtprotoSessionService`) — no always-on MTProto listeners at boot.
-- **Dedupe:** in-process `InboundMessageDedupe` keeps recent `(chat_id, message_id)` keys (TTL ~30m, bounded size) so the same message is not moderated twice if duplicate delivery occurs in one Node process. Not shared across multiple app instances.
+- **Ingest:** `src/routes/bot.ts` runs `ChatAutomationController` first. Updates that carry `business_message` or `message.business_connection_id` are treated as inbound mail for a connected account. The owner user id from `getBusinessConnection` must match an onboarded row in `sessions`.
+- **Act:** Warnings and block DMs go through the management bot (`business_connection_id`). **`contacts.Block`** uses a **lazy** GramJS connection on demand (`MtprotoSessionService`).
+- **Dedupe:** in-process `InboundMessageDedupe` (TTL ~30m, single Node process).
 
 ## Notes
 
-- Analytics writes are deferred with `setImmediate` so request/update handlers are not blocked.
-- There is no separate in-memory analytics queue; each event schedules one asynchronous store write.
+- Analytics export is synchronous OTEL (no Postgres, no in-memory queue).
+- Mimir = aggregates; Elasticsearch = searchable event detail. Both fed from the same `trackEvent` calls via mono collector routing.

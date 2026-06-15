@@ -1,11 +1,13 @@
 # MTProto Moderator logging (`stdout`)
 
-Runtime logs are emitted through `Logger` in `src/utils/logger.ts` to stdout as JSON lines:
+Runtime logs are emitted through `Logger` in `src/utils/logger.ts` to **stdout as JSON lines**:
 
 - `ts`
 - `level`
 - `message`
 - optional metadata fields
+
+On **mono**, Docker container stdout is shipped by **Filebeat** → Logstash → **Elasticsearch** → **Kibana**. Ops and debugging only — not business analytics (separate index; see [analytics.md](analytics.md)).
 
 ## Event catalog
 
@@ -121,12 +123,6 @@ Runtime logs are emitted through `Logger` in `src/utils/logger.ts` to stdout as 
 - **Source:** `src/bg-services/action-queue-service.ts`
 - **When:** Queued moderation action throws
 - **Fields:** `error`
-
-### `message=analytics_persist_failed`
-
-- **Source:** `src/utils/analytics.ts`
-- **When:** Persisting analytics event fails
-- **Fields:** `event`, `error`
 
 ### `message=shutdown_requested`
 

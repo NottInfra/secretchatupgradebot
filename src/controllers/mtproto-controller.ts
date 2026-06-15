@@ -2,6 +2,9 @@ import type { NewMessageEvent } from "telegram/events/NewMessage.js";
 import type { TelegramClient } from "telegram";
 import type { ProcessIncomingMessageUseCase } from "../use-cases/process-incoming-message.js";
 import type { Logger } from "../utils/logger.js";
+import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
+
+const mtprotoTracer = getTracer("mtproto");
 
 export class MtprotoController {
   constructor(
@@ -10,8 +13,9 @@ export class MtprotoController {
   ) {}
 
   async handleNewMessage(client: TelegramClient, sessionId: string, event: NewMessageEvent): Promise<void> {
-    try {
-      const rawMessageText = event.message?.message;
+    await withSpan(mtprotoTracer, "mtproto.handle_message", async (span) => {
+      try {
+        const rawMessageText = event.message?.message;
       const messageText =
         typeof rawMessageText === "string" && rawMessageText.trim().length > 0
           ? rawMessageText
@@ -40,6 +44,13 @@ export class MtprotoController {
 
       const mtprotoReplyEntity = event.message.inputChat ?? undefined;
 
+      setSpanAttributes(span, {
+        "telegram.session_id": sessionId,
+        "telegram.chat_id": chatId,
+        "telegram.sender_id": senderId,
+        "telegram.message_id": telegramMessageId
+      });
+
       await this.useCase.execute({
         sessionId,
         chatId,
@@ -53,8 +64,9 @@ export class MtprotoController {
         mtprotoReplyEntity: mtprotoReplyEntity ?? undefined,
         mtprotoPeer: event.message.peerId
       });
-    } catch (error) {
-      this.logger.error("mtproto_event_handler_failed", { error: String(error) });
-    }
+      } catch (error) {
+        this.logger.error("mtproto_event_handler_failed", { error: String(error) });
+      }
+    });
   }
 }

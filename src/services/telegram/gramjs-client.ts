@@ -1,8 +1,7 @@
 import { TelegramClient } from "telegram";
 import { LogLevel } from "telegram/extensions/Logger.js";
 import type { StringSession } from "telegram/sessions/index.js";
-import type { Logger } from "./logger.js";
-import { gramjsSocksProxyFromEnv } from "./outbound-proxy.js";
+import type { Logger } from "../../utils/logger.js";
 
 export type GramjsClientParams = {
   connectionRetries?: number;
@@ -10,6 +9,23 @@ export type GramjsClientParams = {
 };
 
 const PING_TIMEOUT_LOG_INTERVAL_MS = 60_000;
+
+/** GramJS SOCKS proxy — requires useWSS=false (see TelegramClient constructor). */
+function gramjsSocksProxyFromEnv():
+  | { ip: string; port: number; socksType: 5 }
+  | undefined {
+  const url = process.env.TELEGRAM_SOCKS_PROXY?.trim();
+  if (!url) return undefined;
+  const parsed = new URL(url);
+  if (parsed.protocol !== "socks5:" && parsed.protocol !== "socks5h:") {
+    return undefined;
+  }
+  return {
+    ip: parsed.hostname,
+    port: Number(parsed.port || 9050),
+    socksType: 5
+  };
+}
 
 export function isGramjsPingTimeout(error: unknown): boolean {
   return error instanceof Error && error.message === "TIMEOUT";
@@ -20,7 +36,6 @@ export function attachGramjsGuards(
   client: TelegramClient,
   options: { sessionId?: string; logger?: Logger }
 ): void {
-  // GramJS logs ping TIMEOUT via console.error when log level includes ERROR.
   client.setLogLevel(LogLevel.NONE);
 
   let lastPingTimeoutLogAt = 0;

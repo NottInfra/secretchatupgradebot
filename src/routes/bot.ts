@@ -3,6 +3,9 @@ import type { BotController } from "../controllers/bot-controller.js";
 import type { ChatAutomationController } from "../controllers/chat-automation-controller.js";
 import type { HandleUserMiddleware } from "../middleware/handle-user-middleware.js";
 import type { HandlePolicyUseCase } from "../use-cases/handle-policy.js";
+import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
+
+const botTracer = getTracer("bot");
 
 export type BotRouteDeps = {
   controller: BotController;
@@ -47,22 +50,26 @@ export class BotRoutes {
 
       if (text.startsWith("/")) {
         const command = text.split(/\s+/)[0].toLowerCase();
-        switch (command) {
-          case "/start":
-            await controller.handleStart(userId);
-            return;
-          case "/help":
-          case "/terms":
-          case "/commitment":
-          case "/sponsor":
-            await handlePolicyUseCase.execute(userId, command);
-            return;
-          case "/toggle":
-            await controller.handleToggleOnOff(userId);
-            return;
-          default:
-            return;
-        }
+        await withSpan(botTracer, "bot.command", async (span) => {
+          setSpanAttributes(span, { "telegram.user_id": userId, "bot.command": command });
+          switch (command) {
+            case "/start":
+              await controller.handleStart(userId);
+              return;
+            case "/help":
+            case "/terms":
+            case "/commitment":
+            case "/sponsor":
+              await handlePolicyUseCase.execute(userId, command);
+              return;
+            case "/toggle":
+              await controller.handleToggleOnOff(userId);
+              return;
+            default:
+              return;
+          }
+        });
+        return;
       }
 
       await controller.handleText(userId, text);

@@ -1,6 +1,6 @@
 import { Api, type TelegramClient } from "telegram";
-import type { IncomingMessage } from "../types.js";
-import type { Logger } from "./logger.js";
+import type { IncomingMessage } from "../../types.js";
+import type { Logger } from "../../utils/logger.js";
 
 /**
  * Resolved peer for outbound messages / block (dialogs + Saved Messages fallback).

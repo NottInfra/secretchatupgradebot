@@ -1,7 +1,7 @@
 import type { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import type { SessionRepository } from "../repositories/session-repository.js";
-import { createTelegramClient } from "../utils/gramjs-client.js";
+import { createTelegramClient } from "../services/telegram/gramjs-client.js";
 import type { Logger } from "../utils/logger.js";
 
 /** Lazy GramJS connections for block/onboarding auth — no always-on NewMessage listeners. */

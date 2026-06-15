@@ -1,8 +1,11 @@
 import { Api, TelegramClient } from "telegram";
 import type { IncomingMessage, ModerationDecision } from "../types.js";
 import type { ClientNotificationService } from "../services/client-notification-service.js";
-import { resolveOutboundPeer } from "../utils/mtproto-resolve-outbound-peer.js";
+import { resolveOutboundPeer } from "../services/telegram/resolve-outbound-peer.js";
 import type { Logger } from "../utils/logger.js";
+import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
+
+const moderationTracer = getTracer("moderation");
 
 export class ExecuteModerationActionUseCase {
   constructor(
@@ -21,6 +24,29 @@ export class ExecuteModerationActionUseCase {
     }
   ): Promise<void> {
     if (input.decision.action !== "block") return;
+
+    return withSpan(
+      moderationTracer,
+      "moderation.execute_block",
+      async (span) => {
+        setSpanAttributes(span, {
+          "telegram.sender_id": input.senderId,
+          "telegram.chat_id": input.moderationIncoming?.chatId
+        });
+        await this.executeBlock(client, input);
+      }
+    );
+  }
+
+  private async executeBlock(
+    client: TelegramClient,
+    input: {
+      senderId: string;
+      decision: ModerationDecision;
+      blockMessageHtml?: string;
+      moderationIncoming?: IncomingMessage;
+    }
+  ): Promise<void> {
     const body = input.blockMessageHtml?.trim();
     if (!body) {
       this.logger.error("missing_block_template", { senderId: input.senderId });
@@ -38,12 +64,14 @@ export class ExecuteModerationActionUseCase {
       input.moderationIncoming?.source === "bot_api_automation" && Boolean(businessConnectionId);
 
     if (viaBusinessAutomation) {
-      const sent = await this.notifications.sendBusinessHTMLReply({
+      const sent = await withSpan(moderationTracer, "moderation.send_block_message", async () =>
+        this.notifications.sendBusinessHTMLReply({
         businessConnectionId: businessConnectionId!,
         chatId: input.moderationIncoming!.chatId,
         html: body,
         replyToMessageId: replyToMsgId
-      });
+        })
+      );
       if (!sent) {
         this.logger.error("failed_to_send_block_dm", {
           senderId: input.senderId,
@@ -60,10 +88,11 @@ export class ExecuteModerationActionUseCase {
     } else {
       let entity: Awaited<ReturnType<TelegramClient["getInputEntity"]>>;
       try {
-        entity =
+        entity = await withSpan(moderationTracer, "moderation.resolve_peer", async () =>
           input.moderationIncoming != null
-            ? await resolveOutboundPeer(client, input.moderationIncoming, this.logger)
-            : await client.getInputEntity(input.senderId);
+            ? resolveOutboundPeer(client, input.moderationIncoming, this.logger)
+            : client.getInputEntity(input.senderId)
+        );
       } catch (error) {
         this.logger.error("failed_to_resolve_block_peer", {
           senderId: input.senderId,
@@ -73,11 +102,13 @@ export class ExecuteModerationActionUseCase {
       }
 
       try {
-        const sent = await client.sendMessage(entity, {
-          message: body,
-          parseMode: "html",
-          ...(replyToMsgId != null ? { replyTo: replyToMsgId } : {})
-        });
+        const sent = await withSpan(moderationTracer, "moderation.send_block_message", async () =>
+          client.sendMessage(entity, {
+            message: body,
+            parseMode: "html",
+            ...(replyToMsgId != null ? { replyTo: replyToMsgId } : {})
+          })
+        );
         const sentId = sent instanceof Api.Message ? sent.id : undefined;
         this.logger.info("block_notice_dm_sent", {
           senderId: input.senderId,
@@ -100,7 +131,9 @@ export class ExecuteModerationActionUseCase {
       }
 
       try {
-        await client.invoke(new Api.contacts.Block({ id: entity }));
+        await withSpan(moderationTracer, "moderation.block_contact", async () =>
+          client.invoke(new Api.contacts.Block({ id: entity }))
+        );
         this.logger.info("sender_blocked", { senderId: input.senderId });
       } catch (error) {
         this.logger.error("failed_contacts_block", {
@@ -113,10 +146,11 @@ export class ExecuteModerationActionUseCase {
 
     let blockEntity: Awaited<ReturnType<TelegramClient["getInputEntity"]>>;
     try {
-      blockEntity =
+      blockEntity = await withSpan(moderationTracer, "moderation.resolve_peer", async () =>
         input.moderationIncoming != null
-          ? await resolveOutboundPeer(client, input.moderationIncoming, this.logger)
-          : await client.getInputEntity(input.senderId);
+          ? resolveOutboundPeer(client, input.moderationIncoming, this.logger)
+          : client.getInputEntity(input.senderId)
+      );
     } catch (error) {
       this.logger.error("failed_to_resolve_block_peer", {
         senderId: input.senderId,
@@ -131,7 +165,9 @@ export class ExecuteModerationActionUseCase {
     }
 
     try {
-      await client.invoke(new Api.contacts.Block({ id: blockEntity }));
+      await withSpan(moderationTracer, "moderation.block_contact", async () =>
+        client.invoke(new Api.contacts.Block({ id: blockEntity }))
+      );
       this.logger.info("sender_blocked", { senderId: input.senderId });
     } catch (error) {
       this.logger.error("failed_contacts_block", {

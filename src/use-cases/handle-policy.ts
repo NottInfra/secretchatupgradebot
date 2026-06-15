@@ -2,6 +2,9 @@ import path from "node:path";
 import type { Analytics } from "../utils/analytics.js";
 import type { Logger } from "../utils/logger.js";
 import type { ClientNotificationService } from "../services/client-notification-service.js";
+import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
+
+const policyTracer = getTracer("policy");
 
 export class HandlePolicyUseCase {
   constructor(
@@ -12,7 +15,9 @@ export class HandlePolicyUseCase {
 
   async execute(userId: number, command: string): Promise<void> {
     const normalized = command.toLowerCase();
-    this.analytics.trackEvent("policy_requested", { userId, command: normalized });
+    return withSpan(policyTracer, "policy.send", async (span) => {
+      setSpanAttributes(span, { "telegram.user_id": userId, "policy.command": normalized });
+      this.analytics.trackEvent("policy_requested", { userId, command: normalized });
     let filePath = "";
     switch (normalized) {
       case "/help":
@@ -32,9 +37,11 @@ export class HandlePolicyUseCase {
     }
 
     const sent = await this.notifications.sendHTMLFile(String(userId), filePath);
+    setSpanAttributes(span, { "policy.sent": sent });
     this.analytics.trackEvent("policy_sent", { userId, command: normalized, sent });
     if (!sent) {
       this.logger.warn("policy_send_failed", { userId, command: normalized, filePath });
     }
+    });
   }
 }

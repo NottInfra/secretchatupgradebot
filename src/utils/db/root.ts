@@ -79,16 +79,6 @@ export class Store {
           );
           return;
         }
-        case "analytics.insert": {
-          const [event, props, createdAt] = args as [string, Record<string, unknown>, string];
-          await this.backing.query(
-            `INSERT INTO analytics_events(event, props_json, created_at)
-             VALUES ($1, $2::jsonb, $3::timestamptz)`,
-            [event, JSON.stringify(props), createdAt]
-          );
-          this.invalidateQueryCache();
-          return;
-        }
         case "users.upsert": {
           const [telegramId, username, firstName, lastName, now] = args as [
             number,

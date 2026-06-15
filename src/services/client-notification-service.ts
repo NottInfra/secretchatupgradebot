@@ -2,6 +2,9 @@ import { Input, Telegraf } from "telegraf";
 import fs from "node:fs";
 import path from "node:path";
 import { Logger } from "../utils/logger.js";
+import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
+
+const notificationTracer = getTracer("notification");
 
 export type BusinessAutomationReplyInput = {
   businessConnectionId: string;
@@ -20,6 +23,14 @@ export class ClientNotificationService {
   }
 
   async sendToClient(clientUserId: string, text: string): Promise<boolean> {
+    return withSpan(
+      notificationTracer,
+      "notification.send",
+      async (span) => {
+        setSpanAttributes(span, {
+          "telegram.client_user_id": clientUserId,
+          "notification.kind": "text"
+        });
     if (!this.bot) {
       this.logger.warn("client_notification_skipped_bot_unavailable", { clientUserId });
       return false;
@@ -39,9 +50,19 @@ export class ClientNotificationService {
       this.logger.error("client_notification_failed", { clientUserId, error: String(error) });
       return false;
     }
+      }
+    );
   }
 
   async sendHTML(clientUserId: string, html: string): Promise<boolean> {
+    return withSpan(
+      notificationTracer,
+      "notification.send",
+      async (span) => {
+        setSpanAttributes(span, {
+          "telegram.client_user_id": clientUserId,
+          "notification.kind": "html"
+        });
     if (!this.bot) {
       this.logger.warn("client_notification_skipped_bot_unavailable", { clientUserId });
       return false;
@@ -64,10 +85,20 @@ export class ClientNotificationService {
       });
       return this.sendToClient(clientUserId, this.htmlToPlainText(html));
     }
+      }
+    );
   }
 
   /** Reply in the moderated user's private chat via Telegram Business automation (Bot API). */
   async sendBusinessHTMLReply(input: BusinessAutomationReplyInput): Promise<boolean> {
+    return withSpan(
+      notificationTracer,
+      "notification.send",
+      async (span) => {
+        setSpanAttributes(span, {
+          "telegram.chat_id": input.chatId,
+          "notification.kind": "business_html_reply"
+        });
     if (!this.bot) {
       this.logger.warn("business_automation_reply_skipped_bot_unavailable", {
         chatId: input.chatId
@@ -105,6 +136,8 @@ export class ClientNotificationService {
       });
       return false;
     }
+      }
+    );
   }
 
   async sendBusinessMediaReply(

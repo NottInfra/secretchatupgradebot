@@ -2,12 +2,15 @@ import { StringSession } from "telegram/sessions/index.js";
 import path from "node:path";
 import os from "node:os";
 import { SessionRepository } from "../repositories/session-repository.js";
-import { createTelegramClient } from "../utils/gramjs-client.js";
+import { createTelegramClient } from "../services/telegram/gramjs-client.js";
 import { Logger } from "../utils/logger.js";
 import { AuthChallengeService } from "../services/auth-challenge-service.js";
 import { ClientNotificationService } from "../services/client-notification-service.js";
 import { Analytics } from "../utils/analytics.js";
 import { env } from "../utils/env.js";
+import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
+
+const onboardingTracer = getTracer("onboarding");
 
 type Stage = "idle" | "awaiting_phone" | "authenticating" | "awaiting_code" | "awaiting_password";
 
@@ -72,6 +75,9 @@ export class OnboardingUseCase {
   }
 
   private async runAuthFlow(userId: number, phoneNumber: string): Promise<void> {
+    await withSpan(onboardingTracer, "onboarding.flow", async (flowSpan) => {
+      setSpanAttributes(flowSpan, { "telegram.user_id": userId });
+
     const client = createTelegramClient(
       new StringSession(""),
       env.TELEGRAM_API_ID,
@@ -97,19 +103,22 @@ export class OnboardingUseCase {
             })();
 
       this.logger.info("onboarding_connecting", { userId });
-      await Promise.race([
-        client.connect(),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            reject(new Error(`onboarding_connect_timeout timeoutMs=${env.TELEGRAM_CONNECT_TIMEOUT_MS}`));
-          }, env.TELEGRAM_CONNECT_TIMEOUT_MS);
-        })
-      ]);
+      await withSpan(onboardingTracer, "onboarding.connect", async () =>
+        Promise.race([
+          client.connect(),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => {
+              reject(new Error(`onboarding_connect_timeout timeoutMs=${env.TELEGRAM_CONNECT_TIMEOUT_MS}`));
+            }, env.TELEGRAM_CONNECT_TIMEOUT_MS);
+          })
+        ])
+      );
       this.logger.info("onboarding_connected", { userId });
       await this.notifications.sendToClient(String(userId), "Connected to Telegram. Sending login code...");
       this.logger.info("onboarding_requesting_code", { userId });
 
-      await client.signInUser(
+      await withSpan(onboardingTracer, "onboarding.sign_in", async () =>
+        client.signInUser(
         { apiId: env.TELEGRAM_API_ID, apiHash: env.TELEGRAM_API_HASH },
         {
           phoneNumber,
@@ -139,11 +148,14 @@ export class OnboardingUseCase {
             return true;
           }
         }
+        )
       );
 
       const sessionString = String(client.session.save() ?? "");
       if (!sessionString) throw new Error("session_string_empty_after_auth");
-      await this.sessions.upsertActive(String(userId), sessionString);
+      await withSpan(onboardingTracer, "onboarding.persist_session", async () =>
+        this.sessions.upsertActive(String(userId), sessionString)
+      );
       this.analytics.trackEvent("onboarding_completed", { userId });
       await this.notifications.sendToClient(
         String(userId),
@@ -165,5 +177,6 @@ export class OnboardingUseCase {
     } finally {
       await client.disconnect();
     }
+    });
   }
 }

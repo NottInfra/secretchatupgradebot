@@ -6,11 +6,15 @@ import { ExperimentService, type Assignment } from "../services/experiment-servi
 import { IncomingMessage, ModerationDecision } from "../types.js";
 import { Analytics } from "../utils/analytics.js";
 import { Logger } from "../utils/logger.js";
-import { resolveOutboundPeer } from "../utils/mtproto-resolve-outbound-peer.js";
+import { resolveOutboundPeer } from "../services/telegram/resolve-outbound-peer.js";
 import type { TelegramClient } from "telegram";
 import type { MtprotoSessionService } from "../bg-services/mtproto-session-service.js";
 import { ActionQueueService } from "../bg-services/action-queue-service.js";
 import { ExecuteModerationActionUseCase } from "./execute-moderation-action.js";
+import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
+import type { Span } from "@opentelemetry/api";
+
+const moderationTracer = getTracer("moderation");
 
 const LEVEL1_WARNING_EXPERIMENT_ID = "level1_message_warning";
 const LEVEL2_WARNING_FINAL_EXPERIMENT_ID = "level2_message_warning_final";
@@ -34,6 +38,20 @@ export class ProcessIncomingMessageUseCase {
   ) {}
 
   async execute(message: IncomingMessage): Promise<void> {
+    return withSpan(
+      moderationTracer,
+      "moderation.process_incoming",
+      async (span) => this.executeModeration(message, span),
+      {
+        "telegram.chat_id": message.chatId,
+        "telegram.sender_id": message.senderId,
+        "telegram.message_id": message.telegramMessageId,
+        "telegram.source": message.source ?? "unknown"
+      }
+    );
+  }
+
+  private async executeModeration(message: IncomingMessage, span: Span): Promise<void> {
     if (message.senderIsBot === true) {
       this.analytics.trackEvent("moderation_skipped_bot_sender", {
         senderId: message.senderId,
@@ -50,7 +68,9 @@ export class ProcessIncomingMessageUseCase {
 
     const msgId = message.telegramMessageId;
     if (msgId != null && msgId > 0) {
-      const claimed = this.dedupe.tryClaim(message.chatId, msgId);
+      const claimed = await withSpan(moderationTracer, "moderation.dedupe", async () =>
+        this.dedupe.tryClaim(message.chatId, msgId)
+      );
       if (!claimed) {
         this.analytics.trackEvent("moderation_duplicate_inbound_skipped", {
           senderId: message.senderId,
@@ -95,14 +115,20 @@ export class ProcessIncomingMessageUseCase {
       return;
     }
 
-    const count = await this.messages.countBySender(
-      message.senderId,
-      MESSAGING_INSTANCE_COLLAPSE_WINDOW_SECONDS
-    );
-    const inInstanceCount = await this.messages.countInMessagingInstance(
-      message.senderId,
-      message.date,
-      MESSAGING_INSTANCE_COLLAPSE_WINDOW_SECONDS
+    const { count, inInstanceCount } = await withSpan(
+      moderationTracer,
+      "moderation.load_history",
+      async () => ({
+        count: await this.messages.countBySender(
+          message.senderId,
+          MESSAGING_INSTANCE_COLLAPSE_WINDOW_SECONDS
+        ),
+        inInstanceCount: await this.messages.countInMessagingInstance(
+          message.senderId,
+          message.date,
+          MESSAGING_INSTANCE_COLLAPSE_WINDOW_SECONDS
+        )
+      })
     );
     if (inInstanceCount > 1) {
       const decision: ModerationDecision = {
@@ -135,12 +161,14 @@ export class ProcessIncomingMessageUseCase {
     const tier: "first_warning" | "second_warning" | "block" =
       count === 1 ? "first_warning" : count === 2 ? "second_warning" : "block";
 
-    const tierAssignment =
-      tier === "first_warning"
+    const tierAssignment = await withSpan(moderationTracer, "moderation.assign_tier", async (tierSpan) => {
+      setSpanAttributes(tierSpan, { "moderation.tier": tier });
+      return tier === "first_warning"
         ? this.experiments.assignModerationTier(LEVEL1_WARNING_EXPERIMENT_ID, message.senderId)
         : tier === "second_warning"
           ? this.experiments.assignModerationTier(LEVEL2_WARNING_FINAL_EXPERIMENT_ID, message.senderId)
           : this.experiments.assignModerationTier(LEVEL3_BLOCK_EXPERIMENT_ID, message.senderId);
+    });
 
     const decision: ModerationDecision =
       tier === "block"
@@ -148,6 +176,13 @@ export class ProcessIncomingMessageUseCase {
         : tier === "second_warning"
           ? { action: "allow", confidence: 1, reason: "second_message_warning_sent" }
           : { action: "allow", confidence: 1, reason: "first_message_reply_sent" };
+
+    setSpanAttributes(span, {
+      "moderation.tier": tier,
+      "moderation.action": decision.action,
+      experiment: tierAssignment.experimentId,
+      variant: tierAssignment.variantId
+    });
 
     this.analytics.trackEvent("moderation_decision", {
       senderId: message.senderId,
@@ -161,7 +196,9 @@ export class ProcessIncomingMessageUseCase {
 
     if (tier === "first_warning" || tier === "second_warning") {
       const replyHtml = await this.buildReplyHtml(message, tierAssignment);
-      await this.sendFirstMessageReply(message, replyHtml, tierAssignment.mediaPath);
+      await withSpan(moderationTracer, "moderation.send_reply", async () =>
+        this.sendFirstMessageReply(message, replyHtml, tierAssignment.mediaPath)
+      );
       this.actions.saveDeferred({
         senderId: message.senderId,
         chatId: message.chatId,
@@ -192,7 +229,8 @@ export class ProcessIncomingMessageUseCase {
       decision
     });
 
-    this.actionQueue.enqueue(async () => {
+    await withSpan(moderationTracer, "moderation.queue_block", async () => {
+      this.actionQueue.enqueue(async () => {
       this.analytics.trackEvent("sender_block_queued", {
         senderId: message.senderId,
         chatId: message.chatId,
@@ -226,6 +264,7 @@ export class ProcessIncomingMessageUseCase {
       if (!sentViaBot && client) {
         await this.sendReply(client, "me", noticeHtml);
       }
+      });
     });
 
     this.logger.info("sender_queued_for_block", {
