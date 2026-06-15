@@ -12,7 +12,7 @@ Each event is exported to **Mimir metrics** and **Elasticsearch** (`secretchaton
 
 Counter in Mimir: `analytics_events_total` with labels `event`, prop attributes, `deployment_environment` (from OTEL resource via collector `resource_to_telemetry_conversion`).
 
-Each `trackEvent` also emits an OTLP log (`analytics.export=true`) that the collector writes to **`secretchatonly-bot-analytics`** (bodymap: event fields become the ES document). `apply-dashboards` still posts a one-off `import_bootstrap` doc so Kibana has field caps before live data arrives.
+Each `trackEvent` also emits an OTLP log that the collector writes to **`secretchatonly-bot-analytics`** (`mapping.mode: raw` — log attributes become ES fields). `apply-dashboards` still posts a one-off `import_bootstrap` doc so Kibana has field caps before live data arrives.
 
 ### Elasticsearch document shape
 
@@ -209,4 +209,4 @@ LIMIT 200;
 ## Notes
 
 - Analytics export is synchronous OTEL (no Postgres, no in-memory queue): Mimir counter + OTLP log per event.
-- Mimir = aggregates; Elasticsearch = searchable event detail. Collector routes `analytics.export` logs to `secretchatonly-bot-analytics`.
+- Mimir = aggregates; Elasticsearch = searchable event detail. Collector `logs` pipeline → `secretchatonly-bot-analytics`.

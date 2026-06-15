@@ -8,7 +8,7 @@ Three signals from the app: ops logs (Filebeat), business analytics (OTEL → ES
 | **Business analytics** | `src/utils/analytics.ts` | OTLP → collector | Mimir + `secretchatonly-bot-analytics-*` | **Grafana** + **Kibana** — [analytics.md](analytics.md) |
 | **Traces** | `withSpan` in `telemetry.ts` | OTLP `/v1/traces` | Tempo | **Grafana** Explore |
 
-No OTLP log export for ops — Filebeat ships container stdout. Business analytics documents are OTLP logs routed by the collector (`analytics.export` attribute) into `secretchatonly-bot-analytics`.
+No OTLP log export for ops — Filebeat ships container stdout. Business analytics OTLP logs go to `secretchatonly-bot-analytics` (this app is the only OTLP log source on mono).
 
 ## Pipeline
 

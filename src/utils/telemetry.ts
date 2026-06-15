@@ -20,7 +20,7 @@ import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
-import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
+import { LoggerProvider, SimpleLogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
@@ -32,9 +32,8 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json") as { name: string; version: string };
 
-const ANALYTICS_EXPORT_ATTR = "analytics.export";
-
 let sdk: NodeSDK | undefined;
+let loggerProvider: LoggerProvider | undefined;
 let analyticsCounter: Counter | undefined;
 let analyticsLogger: Logger | undefined;
 
@@ -70,16 +69,22 @@ export async function initTelemetry(): Promise<void> {
     "deployment.environment": env
   });
 
+  loggerProvider = new LoggerProvider({
+    resource,
+    processors: [
+      new SimpleLogRecordProcessor(new OTLPLogExporter({ url: otlpUrl("/v1/logs") }))
+    ]
+  });
+  logs.setGlobalLoggerProvider(loggerProvider);
+
   sdk = new NodeSDK({
     resource,
+    autoDetectResources: false,
     traceExporter: new OTLPTraceExporter({ url: otlpUrl("/v1/traces") }),
     metricReader: new PeriodicExportingMetricReader({
       exporter: new OTLPMetricExporter({ url: otlpUrl("/v1/metrics") }),
       exportIntervalMillis: 60_000
-    }),
-    logRecordProcessors: [
-      new BatchLogRecordProcessor(new OTLPLogExporter({ url: otlpUrl("/v1/logs") }))
-    ]
+    })
   });
 
   await sdk.start();
@@ -97,13 +102,16 @@ export async function initTelemetry(): Promise<void> {
       message: "telemetry_initialized",
       endpoint,
       serviceName,
-      environment: env
+      environment: env,
+      analyticsLogs: true
     })
   );
 }
 
 export async function shutdownTelemetry(): Promise<void> {
+  await loggerProvider?.shutdown();
   await sdk?.shutdown();
+  loggerProvider = undefined;
   sdk = undefined;
   analyticsCounter = undefined;
   analyticsLogger = undefined;
@@ -161,7 +169,6 @@ export async function withSpan<T>(
 
 export function recordAnalyticsMetric(name: string, props: Record<string, unknown>): void {
   if (!analyticsCounter) return;
-  // deployment_environment comes from resource_to_telemetry_conversion on mono collector.
   analyticsCounter.add(1, { event: name, ...attrProps(props) });
 }
 
@@ -174,7 +181,6 @@ export function recordAnalyticsEvent(name: string, props: Record<string, unknown
     severityText: "INFO",
     body: name,
     attributes: {
-      [ANALYTICS_EXPORT_ATTR]: true,
       event: name,
       "deployment.environment": deploymentEnvironment(),
       ...attrProps(props)
