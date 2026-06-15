@@ -51,6 +51,7 @@ mono_sonar_scan() {
     -Dsonar.tests="$sources"
     -Dsonar.test.inclusions=**/*.test.ts
     -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+    -Dsonar.qualitygate.wait=true
   )
 
   if command -v sonar-scanner >/dev/null 2>&1; then

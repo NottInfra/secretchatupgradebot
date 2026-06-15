@@ -34,7 +34,8 @@ const BLOCK_START_NEWLINE = new Set([
 type ParsedTag = { name: string; end: number; closing: boolean };
 
 function isAsciiLetterOrDigit(ch: string): boolean {
-  const code = ch.charCodeAt(0);
+  const code = ch.codePointAt(0);
+  if (code === undefined) return false;
   return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
