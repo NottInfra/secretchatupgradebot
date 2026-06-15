@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InboundMessageDedupe } from "./inbound-message-dedupe.js";
 
 describe("InboundMessageDedupe", () => {
@@ -14,15 +14,23 @@ describe("InboundMessageDedupe", () => {
     expect(dedupe.tryClaim("chat-2", 1)).toBe(true);
   });
 
-  it("allows reclaim after ttl expires", () => {
-    const dedupe = new InboundMessageDedupe({ ttlMs: 1 });
-    expect(dedupe.tryClaim("chat-1", 7)).toBe(true);
-    expect(dedupe.tryClaim("chat-1", 7)).toBe(false);
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        expect(dedupe.tryClaim("chat-1", 7)).toBe(true);
-        resolve();
-      }, 5);
+  describe("ttl expiry", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("allows reclaim after ttl expires", () => {
+      const dedupe = new InboundMessageDedupe({ ttlMs: 1_000 });
+
+      expect(dedupe.tryClaim("chat-1", 7)).toBe(true);
+      expect(dedupe.tryClaim("chat-1", 7)).toBe(false);
+
+      vi.advanceTimersByTime(1_000);
+      expect(dedupe.tryClaim("chat-1", 7)).toBe(true);
     });
   });
 });
