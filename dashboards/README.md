@@ -36,7 +36,7 @@ Requires SSH to mono for `--on-mono`. One password prompt per run (single SSH se
 |--------|--------|
 | Bot startup, `/toggle`, moderation flow | `docker logs <container>` or Kibana Discover on **`logstash-*`**, filter `container.name: *secretchatonly*` |
 | Event counts / rates | **Grafana** dashboard (`analytics_events_total`), environment = `test` or `production` |
-| Analytics saved searches dashboard | **Kibana** `secretchatonly-bot-analytics` — empty until ES document export is implemented |
+| Analytics saved searches dashboard | **Kibana** `secretchatonly-bot-analytics` (OTLP logs + bootstrap doc) |
 
 `apply-dashboards` runs ES index template + bootstrap, Kibana import, and Grafana dashboard import in one pass. Must complete through **field caps** (200 JSON) — not just the index template line. If ES was unreachable, you ran against Mac localhost instead of mono.
 

@@ -2,21 +2,21 @@
 
 Business telemetry via `Analytics.trackEvent(...)` in `src/utils/analytics.ts`.
 
-Each event is exported to **Mimir metrics** today. Ops logs (including some events like `moderation_toggled`) go to **stdout → Filebeat → `logstash-*`** in Kibana Discover.
+Each event is exported to **Mimir metrics** and **Elasticsearch** (`secretchatonly-bot-analytics` via OTLP logs). Ops logs (including some events like `moderation_toggled`) go to **stdout → Filebeat → `logstash-*`** in Kibana Discover.
 
 | Destination | Path | Question it answers | UI |
 |-------------|------|---------------------|-----|
 | **Mimir** | App → OTLP `/v1/metrics` → otel-collector → Mimir | How many? What rate? Per `event` label? | Grafana — [dashboards/grafana.json](../../dashboards/grafana.json) |
 | **Ops logs (ELK)** | App → stdout JSON → Filebeat → Logstash → `logstash-*` | What happened in the process? grep by `message` | Kibana Discover (`logstash-*` data view) |
-| **Elasticsearch analytics stream** | Not wired yet — `secretchatonly-bot-analytics` is bootstrapped for Kibana import only | Future: searchable event documents | [dashboards/kibana.ndjson](../../dashboards/kibana.ndjson) (empty until ES export is added) |
+| **Elasticsearch analytics stream** | App → OTLP `/v1/logs` → otel-collector → `secretchatonly-bot-analytics` | Searchable event documents | [dashboards/kibana.ndjson](../../dashboards/kibana.ndjson) |
 
-Counter in Mimir: `analytics_events_total` with labels `event`, prop attributes (stringified), `deployment_environment` (from `NODE_ENV`, e.g. `test`).
+Counter in Mimir: `analytics_events_total` with labels `event`, prop attributes, `deployment_environment` (from OTEL resource via collector `resource_to_telemetry_conversion`).
 
-The Kibana analytics dashboard reads data stream **`secretchatonly-bot-analytics`**, which today only has the bootstrap doc from `./cmd/apply-dashboards`. **`moderation_toggled` will not appear there** until analytics documents are exported to ES (collector/app change). It **does** appear in container logs and, after ~60s, in Grafana if OTEL reaches Mimir.
+Each `trackEvent` also emits an OTLP log (`analytics.export=true`) that the collector writes to **`secretchatonly-bot-analytics`** (bodymap: event fields become the ES document). `apply-dashboards` still posts a one-off `import_bootstrap` doc so Kibana has field caps before live data arrives.
 
 ### Elasticsearch document shape
 
-One document per `trackEvent` (collector-side export from OTEL; provisioned on mono):
+One document per `trackEvent` (OTLP log → collector `bodymap` → data stream):
 
 ```json
 {
@@ -208,5 +208,5 @@ LIMIT 200;
 
 ## Notes
 
-- Analytics export is synchronous OTEL (no Postgres, no in-memory queue).
-- Mimir = aggregates; Elasticsearch = searchable event detail. Both fed from the same `trackEvent` calls via mono collector routing.
+- Analytics export is synchronous OTEL (no Postgres, no in-memory queue): Mimir counter + OTLP log per event.
+- Mimir = aggregates; Elasticsearch = searchable event detail. Collector routes `analytics.export` logs to `secretchatonly-bot-analytics`.

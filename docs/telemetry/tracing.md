@@ -8,7 +8,7 @@ Three signals from the app: ops logs (Filebeat), business analytics (OTEL → ES
 | **Business analytics** | `src/utils/analytics.ts` | OTLP → collector | Mimir + `secretchatonly-bot-analytics-*` | **Grafana** + **Kibana** — [analytics.md](analytics.md) |
 | **Traces** | `withSpan` in `telemetry.ts` | OTLP `/v1/traces` | Tempo | **Grafana** Explore |
 
-No OTLP log export for ops — Filebeat ships container stdout. Business analytics documents land in Elasticsearch via the collector; counters also go to Mimir.
+No OTLP log export for ops — Filebeat ships container stdout. Business analytics documents are OTLP logs routed by the collector (`analytics.export` attribute) into `secretchatonly-bot-analytics`.
 
 ## Pipeline
 
@@ -19,7 +19,7 @@ secretchatonly-bot
   │
   └── Analytics + traces ──► OTLP :4318 ──► otel-collector
                     │              ├── metrics ──► Mimir ──► Grafana
-                    │              ├── analytics docs ──► Elasticsearch ──► Kibana
+                    │              ├── analytics OTLP logs ──► Elasticsearch (`secretchatonly-bot-analytics`) ──► Kibana
                     │              └── traces ──► Tempo ──► Grafana
 ```
 
@@ -31,7 +31,7 @@ Collector config on mono: `devops/servers/mono/configs/otel-collector.yml`.
 |--------|------|
 | `src/utils/telemetry.ts` | OTEL Node SDK, `withSpan`, `getTracer`, analytics counter |
 | `src/utils/logger.ts` | Structured stdout JSON only |
-| `src/utils/analytics.ts` | Business events → Mimir counter + Elasticsearch documents |
+| `src/utils/analytics.ts` | Business events → Mimir counter + OTLP log (Elasticsearch document) |
 
 Platform artifacts: [dashboards/](../../dashboards/), [alerts/](../../alerts/). Overview: [README.md](README.md).
 

@@ -2,9 +2,11 @@
  * OpenTelemetry export → mono otel-collector:4318
  *   traces  → Tempo (Grafana)
  *   metrics → Mimir (Prometheus remote write)
+ *   analytics logs → Elasticsearch (secretchatonly-bot-analytics data stream)
  *
- * App logs: stdout JSON → Filebeat → ELK (see docs/telemetry/logging.md).
+ * App ops logs: stdout JSON → Filebeat → ELK (see docs/telemetry/logging.md).
  */
+import { logs, SeverityNumber, type Logger } from "@opentelemetry/api-logs";
 import {
   metrics,
   trace,
@@ -14,9 +16,11 @@ import {
   type Span,
   type Tracer
 } from "@opentelemetry/api";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
+import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
@@ -28,8 +32,11 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json") as { name: string; version: string };
 
+const ANALYTICS_EXPORT_ATTR = "analytics.export";
+
 let sdk: NodeSDK | undefined;
 let analyticsCounter: Counter | undefined;
+let analyticsLogger: Logger | undefined;
 
 function otlpEndpoint(): string | undefined {
   if (process.env.OTEL_SDK_DISABLED?.trim().toLowerCase() === "true") return undefined;
@@ -42,6 +49,10 @@ function otlpUrl(path: string): string {
   return `${base}${path}`;
 }
 
+function deploymentEnvironment(): string {
+  return process.env.NODE_ENV?.trim() || "development";
+}
+
 export function telemetryEnabled(): boolean {
   return Boolean(otlpEndpoint());
 }
@@ -51,7 +62,7 @@ export async function initTelemetry(): Promise<void> {
   if (!endpoint) return;
 
   const serviceName = process.env.OTEL_SERVICE_NAME?.trim() || pkg.name;
-  const env = process.env.NODE_ENV?.trim() || "development";
+  const env = deploymentEnvironment();
 
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: serviceName,
@@ -65,7 +76,10 @@ export async function initTelemetry(): Promise<void> {
     metricReader: new PeriodicExportingMetricReader({
       exporter: new OTLPMetricExporter({ url: otlpUrl("/v1/metrics") }),
       exportIntervalMillis: 60_000
-    })
+    }),
+    logRecordProcessors: [
+      new BatchLogRecordProcessor(new OTLPLogExporter({ url: otlpUrl("/v1/logs") }))
+    ]
   });
 
   await sdk.start();
@@ -74,6 +88,7 @@ export async function initTelemetry(): Promise<void> {
   analyticsCounter = meter.createCounter("analytics_events_total", {
     description: "Business analytics events"
   });
+  analyticsLogger = logs.getLogger(`${serviceName}/analytics`, pkg.version);
 
   console.log(
     JSON.stringify({
@@ -91,6 +106,7 @@ export async function shutdownTelemetry(): Promise<void> {
   await sdk?.shutdown();
   sdk = undefined;
   analyticsCounter = undefined;
+  analyticsLogger = undefined;
 }
 
 export function getTracer(name = pkg.name): Tracer {
@@ -145,10 +161,23 @@ export async function withSpan<T>(
 
 export function recordAnalyticsMetric(name: string, props: Record<string, unknown>): void {
   if (!analyticsCounter) return;
-  const deployment_environment = process.env.NODE_ENV?.trim() || "development";
-  analyticsCounter.add(1, { event: name, deployment_environment, ...attrProps(props) });
+  // deployment_environment comes from resource_to_telemetry_conversion on mono collector.
+  analyticsCounter.add(1, { event: name, ...attrProps(props) });
 }
 
 export function recordAnalyticsEvent(name: string, props: Record<string, unknown>): void {
   recordAnalyticsMetric(name, props);
+  if (!analyticsLogger) return;
+
+  analyticsLogger.emit({
+    severityNumber: SeverityNumber.INFO,
+    severityText: "INFO",
+    body: name,
+    attributes: {
+      [ANALYTICS_EXPORT_ATTR]: true,
+      event: name,
+      "deployment.environment": deploymentEnvironment(),
+      ...attrProps(props)
+    }
+  });
 }
