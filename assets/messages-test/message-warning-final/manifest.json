@@ -1,0 +1,10 @@
+{
+  "experiment": "level2_message_warning_final",
+  "variants": [
+    {
+      "id": "test",
+      "file": "variant-test.html",
+      "weight": 1
+    }
+  ]
+}

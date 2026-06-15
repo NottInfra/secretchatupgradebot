@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# Read docs/project.yml (fixed layout — bash only).
+set -euo pipefail
+
+PROJECT_YML="${PROJECT_YML:-docs/project.yml}"
+
+project_root() {
+  if [[ -n "${PROJECT_ROOT:-}" ]]; then
+    printf '%s' "$PROJECT_ROOT"
+    return
+  fi
+  local root
+  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -z "$root" ]]; then
+    root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  fi
+  PROJECT_ROOT="$root"
+  printf '%s' "$root"
+}
+
+project_file() {
+  local root f
+  if [[ "$PROJECT_YML" == /* ]]; then
+    f="$PROJECT_YML"
+  else
+    root="$(project_root)"
+    f="${root}/${PROJECT_YML}"
+  fi
+  [[ -f "$f" ]] || { echo "[!] missing $f" >&2; return 1; }
+  printf '%s' "$f"
+}
+
+_yaml_top() {
+  awk -v k="$1" '$1 == k ":" { print $2; exit }' "$(project_file)"
+}
+
+_yaml_section2() {
+  local section="$1" key="$2"
+  awk -v s="$section:" -v k="$key" '
+    $0 == s { on=1; next }
+    on && /^[^ #]/ { exit }
+    on && $1 == k ":" { print $2; exit }
+  ' "$(project_file)"
+}
+
+_yaml_section3() {
+  local section="$1" sub="$2" key="$3"
+  awk -v s="$section:" -v m="$sub:" -v k="$key" '
+    $0 == s { on=1; next }
+    on && $0 == "  " m { subon=1; next }
+    on && subon && /^  [^ ]/ && $0 !~ /^    / { subon=0 }
+    on && subon && /^    / && $1 == k ":" { print $2; exit }
+  ' "$(project_file)"
+}
+
+_yaml_remote() {
+  local staging="$1" key="$2"
+  awk -v s="  ${staging}:" -v k="$key" '
+    $0 ~ /^remotes:/ { on=1; next }
+    on && /^[^ #]/ && !/^  / { exit }
+    $0 == s { ch=1; next }
+    ch && /^  [^ ]/ && $0 != s { ch=0 }
+    ch && $1 == k ":" { print $2; exit }
+  ' "$(project_file)"
+}
+
+_yaml_env_file() {
+  local staging="$1"
+  awk -v st="$staging" '
+    /^env:/ { on=1; next }
+    on && /^[^ #]/ && !/^ / { exit }
+    on && $0 ~ "^  " st ":[[:space:]]*" {
+      sub(/^[^:]*:[[:space:]]*/, "")
+      gsub(/[[:space:]]+$/, "")
+      print
+      exit
+    }
+  ' "$(project_file)"
+}
+
+project_yaml_get() {
+  local path="$1" v
+  case "$path" in
+    project) _yaml_top project ;;
+    group) _yaml_top group ;;
+    mono.host) _yaml_section2 mono host ;;
+    mono.registry) _yaml_section2 mono registry ;;
+    mono.network) _yaml_section2 mono network ;;
+    remotes.live.remote) _yaml_remote live remote ;;
+    remotes.live.url) _yaml_remote live url ;;
+    remotes.live.branch) _yaml_remote live branch ;;
+    remotes.live.release) _yaml_remote live release ;;
+    remotes.test.remote) _yaml_remote test remote ;;
+    remotes.test.url) _yaml_remote test url ;;
+    remotes.test.branch) _yaml_remote test branch ;;
+    remotes.test.release) _yaml_remote test release ;;
+    env.live) _yaml_env_file live ;;
+    env.test) _yaml_env_file test ;;
+    staging.live.registry_tag) _yaml_section3 staging live registry_tag ;;
+    staging.live.ports.host)
+      awk '/^  live:/{l=1} l&&/^  test:/{exit} l&&/^      host:/{print $2;exit}' "$(project_file)" ;;
+    staging.live.ports.container)
+      awk '/^  live:/{l=1} l&&/^  test:/{exit} l&&/^      container:/{print $2;exit}' "$(project_file)" ;;
+    staging.test.ports.host)
+      awk '/^  test:/{t=1} t&&/^[^ #]/&&!/^  /{exit} t&&/^      host:/{print $2;exit}' "$(project_file)" ;;
+    staging.test.ports.container)
+      awk '/^  test:/{t=1} t&&/^[^ #]/&&!/^  /{exit} t&&/^      container:/{print $2;exit}' "$(project_file)" ;;
+    staging.test.registry_tag) _yaml_section3 staging test registry_tag ;;
+    *) echo "[!] unknown project key: $path" >&2; return 1 ;;
+  esac
+}
+
+_lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+project_normalize_staging() {
+  case "$(_lc "$1")" in
+    production|live|prod) echo live ;;
+    test|staging) echo test ;;
+    *) echo "$1" ;;
+  esac
+}
+
+project_vault_path() {
+  local staging project group g
+  staging="$(project_normalize_staging "$1")"
+  project="$(project_yaml_get project)"
+  group="$(project_yaml_get group)"
+  g="$(_lc "$group")"
+  if [[ -z "$g" || "$g" == "null" || "$g" == "none" ]]; then
+    echo "${staging}-${project}"
+  else
+    echo "${staging}-${g}-${project}"
+  fi
+}
+
+# Host env file materialized from Vault — mirrors secret/{vault_project}
+project_host_env_file() {
+  printf '/root/%s.env' "$(project_vault_path "$1")"
+}
+
+project_image() {
+  local staging registry project tag
+  staging="$(project_normalize_staging "$1")"
+  registry="$(project_yaml_get mono.registry)"
+  registry="${registry:-registry:5000}"
+  project="$(project_yaml_get project)"
+  tag="$(project_yaml_get "staging.${staging}.registry_tag")"
+  echo "${registry}/${project}:${tag}"
+}
+
+project_container_name() {
+  local staging project
+  staging="$(project_normalize_staging "$1")"
+  project="$(project_yaml_get project)"
+  echo "${project}-${staging}"
+}
+
+project_load_staging() {
+  local staging
+  staging="$(project_normalize_staging "$1")"
+  STAGING="$staging"
+  PROJECT_NAME="$(project_yaml_get project)"
+  IMAGE="$(project_image "$staging")"
+  CONTAINER_NAME="$(project_container_name "$staging")"
+  VAULT_PROJECT="$(project_vault_path "$staging")"
+  ENV_FILE="$(project_host_env_file "$staging")"
+  HOST_PORT="$(project_yaml_get "staging.${staging}.ports.host")"
+  CONTAINER_PORT="$(project_yaml_get "staging.${staging}.ports.container")"
+  EXPECTED_BRANCH="$(project_yaml_get "remotes.${staging}.branch")"
+  RELEASE_FILE="$(project_yaml_get "remotes.${staging}.release")"
+  REMOTE_NAME="$(project_yaml_get "remotes.${staging}.remote")"
+  REMOTE_URL="$(project_yaml_get "remotes.${staging}.url")"
+  SONAR_KEY="$PROJECT_NAME"
+  MONO_HOST="$(project_yaml_get mono.host)"
+  ENV_SOURCE="$(project_yaml_get "env.${staging}")"
+}
+
+project_export_staging() {
+  local staging="${1:?}" fmt="${2:-shell}"
+  project_load_staging "$staging"
+  local vars=(
+    STAGING PROJECT_NAME IMAGE CONTAINER_NAME ENV_FILE HOST_PORT CONTAINER_PORT
+    VAULT_PROJECT EXPECTED_BRANCH RELEASE_FILE REMOTE_NAME REMOTE_URL SONAR_KEY MONO_HOST ENV_SOURCE
+  )
+  local v
+  for v in "${vars[@]}"; do
+    if [[ "$fmt" == github ]]; then
+      printf '%s=%s\n' "$v" "${!v}"
+    else
+      printf 'export %s=%q\n' "$v" "${!v}"
+    fi
+  done
+}
+
+project_list_staging() {
+  awk '/^env:/ { on=1; next } on && /^[^ #]/ && !/^ / { exit } on && /^  [a-z]+:/ { gsub(/:$/, "", $1); print $1 }' "$(project_file)"
+}

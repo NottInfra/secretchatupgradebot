@@ -1,0 +1,45 @@
+# Project manifest — remotes, deploy wiring (committed; no secrets).
+# Runtime env (AUTH_HOST_BASE, tokens, …) lives in .env.production / .env.test
+# → push with cmd/manual-env-hashicorp-push → Vault secret/{staging}-{project}
+# → optional: script creates ci-read-* token + sets VAULT_READ_TOKEN on GitHub/GitLab
+# → CI materializes Vault → /root/{staging}-{project}.env (same name as secret path)
+
+project: secretchatonly-bot
+group: null
+
+mono:
+  host: 104.152.211.241
+  registry: registry:5000
+  network: mono
+
+remotes:
+  live:
+    remote: origin
+    url: git@github.com:NottInfra/secretchatupgradebot.git
+    branch: main
+    release: release/production.yml
+  test:
+    remote: gitlab
+    url: ssh://git@gitlab.nottinfra.co.uk:2222/nottinfra-limited/secretchatupgradebot.git
+    branch: develop
+    release: release/test.yml
+
+# Local source files for manual-env-hashicorp-push (gitignored)
+# test: GITLAB_TOKEN auto-created on CI sync if missing (needs GITLAB_ADMIN_TOKEN in devops mono .env.local)
+env:
+  live: .env.production
+  test: .env.test
+
+# Deploy wiring only — not app secrets
+# Host env: /root/{staging}-{project}.env (e.g. /root/test-secretchatonly-bot.env)
+staging:
+  live:
+    registry_tag: prod
+    ports:
+      host: 8787
+      container: 8787
+  test:
+    registry_tag: test
+    ports:
+      host: 8788
+      container: 8787

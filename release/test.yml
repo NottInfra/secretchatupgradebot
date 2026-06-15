@@ -1,0 +1,19 @@
+# Test deploy compose — CI sets IMAGE, CONTAINER_NAME, ENV_FILE (/root/test-{project}.env), ports from docs/project.yml
+
+services:
+  app:
+    image: ${IMAGE}
+    container_name: ${CONTAINER_NAME}
+    env_file: ${ENV_FILE}
+    ports:
+      - "${HOST_PORT}:${CONTAINER_PORT}"
+    networks:
+      - mono
+    restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+networks:
+  mono:
+    external: true
+    name: mono

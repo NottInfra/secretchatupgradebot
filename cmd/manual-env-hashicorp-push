@@ -1,0 +1,348 @@
+#!/usr/bin/env bash
+# Manual push: local env files → Vault (dev over NetBird).
+# VAULT_ADDR + VAULT_TOKEN: export, or read from ../devops/servers/mono/.env(.local)
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[[ -n "$ROOT" ]] || ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+# shellcheck source=lib/project.sh
+source "${ROOT}/cmd/lib/project.sh"
+# shellcheck source=lib/vault.sh
+source "${ROOT}/cmd/lib/vault.sh"
+
+mask_token() {
+  local t="$1"
+  if [[ ${#t} -le 12 ]]; then
+    printf '(hidden)'
+    return
+  fi
+  printf '%s...%s' "${t:0:8}" "${t: -4}"
+}
+
+ci_url_placeholder() {
+  [[ "$1" == *YOUR_ORG* || "$1" == *YOUR_GROUP* ]]
+}
+
+ci_parse_remote_url() {
+  local url="$1"
+  CI_HOST=""
+  CI_PATH=""
+  # ssh://git@host:port/group/repo.git
+  if [[ "$url" =~ ^ssh://git@([^:/]+):[0-9]+/(.+)$ ]]; then
+    CI_HOST="${BASH_REMATCH[1]}"
+    CI_PATH="${BASH_REMATCH[2]%.git}"
+    return 0
+  fi
+  # ssh://git@host/group/repo.git
+  if [[ "$url" =~ ^ssh://git@([^/]+)/(.+)$ ]]; then
+    CI_HOST="${BASH_REMATCH[1]}"
+    CI_PATH="${BASH_REMATCH[2]%.git}"
+    return 0
+  fi
+  if [[ "$url" =~ ^git@([^:]+):(.+)$ ]]; then
+    CI_HOST="${BASH_REMATCH[1]}"
+    CI_PATH="${BASH_REMATCH[2]%.git}"
+    return 0
+  fi
+  if [[ "$url" =~ ^https?://([^/]+)/(.+)$ ]]; then
+    CI_HOST="${BASH_REMATCH[1]}"
+    CI_PATH="${BASH_REMATCH[2]%.git}"
+    return 0
+  fi
+  return 1
+}
+
+sync_github_vault_read_token() {
+  local repo_url="$1" token="$2" repo
+  ci_url_placeholder "$repo_url" && {
+    echo "[!] GitHub URL still has YOUR_ORG — set docs/project.yml first" >&2
+    return 1
+  }
+  ci_parse_remote_url "$repo_url" || {
+    echo "[!] Cannot parse GitHub URL: $repo_url" >&2
+    return 1
+  }
+  if [[ "$CI_HOST" != "github.com" ]]; then
+    echo "[!] GitHub secret sync only supports github.com (got ${CI_HOST})" >&2
+    return 1
+  fi
+  repo="$CI_PATH"
+  command -v gh >/dev/null || {
+    echo "[!] gh CLI required — install and run: gh auth login" >&2
+    return 1
+  }
+  gh secret set VAULT_READ_TOKEN --body "$token" -R "$repo"
+  echo "[+] GitHub ${repo}: secret VAULT_READ_TOKEN"
+}
+
+gitlab_ci_upsert_variable() {
+  local api="$1" gitlab_token="$2" key="$3" value="$4" body
+  body="$(jq -n --arg k "$key" --arg v "$value" \
+    '{key:$k,value:$v,masked:true,protected:false,variable_type:"env_var"}')"
+  if curl -fsS --request PUT \
+    --header "PRIVATE-TOKEN: ${gitlab_token}" \
+    --header "Content-Type: application/json" \
+    --data "$body" \
+    "${api}/${key}" >/dev/null 2>&1; then
+    return 0
+  fi
+  curl -fsS --request POST \
+    --header "PRIVATE-TOKEN: ${gitlab_token}" \
+    --header "Content-Type: application/json" \
+    --data "$body" \
+    "$api" >/dev/null
+}
+
+gitlab_admin_token() {
+  printf '%s' "${GITLAB_ADMIN_TOKEN:-}"
+}
+
+gitlab_api_host() {
+  local host="${GITLAB_EXTERNAL_URL:-https://${CI_HOST:-gitlab.nottinfra.co.uk}}"
+  host="${host%/}"
+  printf '%s' "$host"
+}
+
+gitlab_create_project_token() {
+  local project_path="$1" admin_token="$2" api_host encoded tmp name expires
+  api_host="$(gitlab_api_host)"
+  encoded="$(jq -rn --arg p "$project_path" '$p|@uri')"
+  name="secretchatonly-bot-ci-$(date +%Y%m%d)"
+  expires="$(date -v+365d +%Y-%m-%d 2>/dev/null || date -d '+365 days' +%Y-%m-%d)"
+  tmp="$(mktemp)"
+  curl -fsS --request POST \
+    --header "PRIVATE-TOKEN: ${admin_token}" \
+    --header "Content-Type: application/json" \
+    --data "$(jq -n \
+      --arg name "$name" \
+      --arg exp "$expires" \
+      '{name:$name, scopes:["api"], access_level:40, expires_at:$exp}')" \
+    "${api_host}/api/v4/projects/${encoded}/access_tokens" >"$tmp"
+  jq -r '.token // empty' "$tmp"
+  rm -f "$tmp"
+}
+
+gitlab_token_resolve() {
+  local env_file="$1" vault_path="$2" token admin
+  token="$(env_file_get GITLAB_TOKEN "$env_file" 2>/dev/null || true)"
+  [[ -n "$token" ]] && { printf '%s' "$token"; return 0; }
+  token="$(vault_secret_get "$vault_path" GITLAB_TOKEN 2>/dev/null || true)"
+  [[ -n "$token" ]] && { printf '%s' "$token"; return 0; }
+
+  admin="$(gitlab_admin_token)"
+  if [[ -z "$admin" ]]; then
+    echo "[!] GITLAB_TOKEN missing and no GITLAB_ADMIN_TOKEN in devops/servers/mono/.env.local" >&2
+    echo "[i] Add GITLAB_ADMIN_TOKEN=glpat-... (Maintainer+ on ${CI_PATH:-project}) to mono .env.local" >&2
+    return 1
+  fi
+
+  echo "[+] Creating GitLab project access token (api scope)…" >&2
+  token="$(gitlab_create_project_token "$CI_PATH" "$admin")"
+  [[ -n "$token" ]] || { echo "[!] GitLab project token create failed" >&2; return 1; }
+
+  env_file_set GITLAB_TOKEN "$token" "$env_file"
+  vault_merge_key "$vault_path" GITLAB_TOKEN "$token"
+  echo "[+] GITLAB_TOKEN → ${env_file} + secret/${vault_path}" >&2
+  printf '%s' "$token"
+}
+
+sync_gitlab_ci_secrets() {
+  local repo_url="$1" vault_read_token="$2" env_file="${3:-}" vault_path="${4:-}" encoded api gitlab_token
+  ci_url_placeholder "$repo_url" && {
+    echo "[!] GitLab URL still has YOUR_GROUP — set docs/project.yml first" >&2
+    return 1
+  }
+  ci_parse_remote_url "$repo_url" || {
+    echo "[!] Cannot parse GitLab URL: $repo_url" >&2
+    return 1
+  }
+
+  gitlab_token="$(gitlab_token_resolve "$env_file" "$vault_path")" || return 1
+
+  encoded="$(jq -rn --arg p "$CI_PATH" '$p|@uri')"
+  api="$(gitlab_api_host)/api/v4/projects/${encoded}/variables"
+
+  gitlab_ci_upsert_variable "$api" "$gitlab_token" VAULT_READ_TOKEN "$vault_read_token"
+  echo "[+] GitLab ${CI_PATH}: variable VAULT_READ_TOKEN"
+
+  gitlab_ci_upsert_variable "$api" "$gitlab_token" GITLAB_TOKEN "$gitlab_token"
+  echo "[+] GitLab ${CI_PATH}: variable GITLAB_TOKEN"
+}
+
+sync_ci_vault_read_token() {
+  local staging="$1" token="$2" env_file
+  project_load_staging "$staging"
+  env_file="${ROOT}/${ENV_SOURCE}"
+  case "$staging" in
+    live) sync_github_vault_read_token "$REMOTE_URL" "$token" ;;
+    test) sync_gitlab_ci_secrets "$REMOTE_URL" "$token" "$env_file" "$VAULT_PROJECT" ;;
+    *)
+      echo "[!] No CI mapping for staging: $staging" >&2
+      return 1
+      ;;
+  esac
+}
+
+vault_load_dev_credentials || true
+if [[ -z "${VAULT_ADDR:-}" || -z "${VAULT_TOKEN:-}" ]]; then
+  echo "[!] Set VAULT_ADDR + VAULT_TOKEN, or add them to devops/servers/mono/.env.local"
+  exit 1
+fi
+
+vault_health || { echo "[!] Vault unreachable at ${VAULT_ADDR}"; exit 1; }
+vault_token_admin
+
+echo ""
+echo "Vault @ ${VAULT_ADDR}"
+echo "Project: $(project_yaml_get project)"
+
+STAGES=()
+while IFS= read -r _stage; do
+  [[ -n "$_stage" ]] && STAGES+=("$_stage")
+done < <(project_list_staging)
+echo ""
+echo "Staging:"
+i=1
+for s in "${STAGES[@]}"; do
+  echo "  ${i}) ${s}  ← $(project_yaml_get "env.${s}")  → secret/$(project_vault_path "$s")"
+  ((i++)) || true
+done
+echo "  ${i}) all"
+read -r -p "Choose [1]: " choice
+choice="${choice:-1}"
+
+selected=()
+if [[ "$choice" -eq "$i" ]]; then
+  selected=("${STAGES[@]}")
+elif [[ "$choice" -ge 1 && "$choice" -lt "$i" ]]; then
+  selected=("${STAGES[$((choice - 1))]}")
+else
+  echo "[!] invalid choice"; exit 1
+fi
+
+total_add=0 total_adj=0 total_same=0
+TO_WRITE=()
+PREVIEW_DIR="$(mktemp -d "${TMPDIR:-/tmp}/vault-push.XXXXXX")"
+trap 'rm -rf "$PREVIEW_DIR"' EXIT
+
+issue_ci_read_tokens() {
+  local staging secret policy_name read_token
+  for staging in "$@"; do
+    secret="$(project_vault_path "$staging")"
+    policy_name="$(vault_ci_read_policy_name "$secret")"
+    read_token="$(vault_create_ci_read_token "$secret")"
+    vault_verify_read_token "$secret" "$read_token"
+    echo ""
+    echo "── ${staging} ──"
+    echo "   policy:  ${policy_name}"
+    echo "   path:    secret/${secret}"
+    echo "   token:   $(mask_token "$read_token")"
+    project_load_staging "$staging"
+    echo "   remote:  ${REMOTE_NAME} (${REMOTE_URL})"
+    sync_ci_vault_read_token "$staging" "$read_token"
+  done
+}
+
+preview_staging() {
+  local staging="$1" envf secret local_file local_json vault_json merged vault_ver
+  envf="$(project_yaml_get "env.${staging}")"
+  secret="$(project_vault_path "$staging")"
+  local_file="${ROOT}/${envf}"
+
+  echo ""
+  echo "── ${staging} ──"
+  echo "   local:  ${envf}"
+  echo "   vault:  secret/${secret}"
+
+  [[ -f "$local_file" ]] || {
+    vault_ver="$(vault_read_version "$secret")"
+    echo "   vault version: ${vault_ver:-none}"
+    echo "   [!] local missing — skip push preview"
+    return 0
+  }
+
+  local_json="$(env_file_to_json "$local_file")"
+  vault_json="$(vault_read_secret_json "$secret")"
+  vault_ver="$(vault_read_version "$secret")"
+  merged="$(jq -n --argjson v "$vault_json" --argjson l "$local_json" '$v + $l')"
+
+  local n_add n_adj n_same
+  n_add="$(jq -n --argjson l "$local_json" --argjson v "$vault_json" \
+    '[ $l | keys[] | select(. as $k | $v | has($k) | not) ] | length')"
+  n_adj="$(jq -n --argjson l "$local_json" --argjson v "$vault_json" \
+    '[ $l | keys[] | select(. as $k | ($v | has($k)) and ($v[$k] != $l[$k])) ] | length')"
+  n_same="$(jq -n --argjson l "$local_json" --argjson v "$vault_json" \
+    '[ $l | keys[] | select(. as $k | ($v | has($k)) and ($v[$k] == $l[$k])) ] | length')"
+
+  echo "   vault version: ${vault_ver:-none}"
+  echo "   plan: +${n_add} add, ~${n_adj} adjust, =${n_same} unchanged"
+
+  if [[ "$n_add" -gt 0 ]]; then
+    jq -n -r --argjson l "$local_json" --argjson v "$vault_json" \
+      '$l | keys[] | select(. as $k | $v | has($k) | not) | "   + " + .'
+  fi
+  if [[ "$n_adj" -gt 0 ]]; then
+    jq -n -r --argjson l "$local_json" --argjson v "$vault_json" \
+      '$l | keys[] | select(. as $k | ($v | has($k)) and ($v[$k] != $l[$k])) | "   ~ " + .'
+  fi
+
+  total_add=$((total_add + n_add))
+  total_adj=$((total_adj + n_adj))
+  total_same=$((total_same + n_same))
+
+  if [[ "$n_add" -gt 0 || "$n_adj" -gt 0 ]]; then
+    printf '%s' "$merged" >"${PREVIEW_DIR}/${staging}.json"
+    TO_WRITE+=("${staging}|${secret}")
+  fi
+}
+
+for s in "${selected[@]}"; do
+  preview_staging "$s"
+done
+
+echo ""
+echo "Total: +${total_add} add, ~${total_adj} adjust, =${total_same} unchanged"
+
+if [[ ${#TO_WRITE[@]} -gt 0 ]]; then
+  read -r -p "Write new Vault version(s)? [y/N]: " confirm
+  case "$(_lc "${confirm:-}")" in
+    y|yes)
+      for row in "${TO_WRITE[@]}"; do
+        IFS='|' read -r staging secret <<<"$row"
+        merged="$(<"${PREVIEW_DIR}/${staging}.json")"
+        vault_write_secret "$secret" "$merged"
+        echo "[+] ${staging}: secret/${secret} updated"
+      done
+      ;;
+    *)
+      echo "[i] Skipped Vault write"
+      ;;
+  esac
+else
+  echo "[=] Vault already in sync — no secret changes to push"
+fi
+
+CI_TARGETS=()
+for s in "${selected[@]}"; do
+  secret="$(project_vault_path "$s")"
+  if [[ -n "$(vault_read_version "$secret")" ]]; then
+    CI_TARGETS+=("$s")
+  fi
+done
+
+if [[ ${#CI_TARGETS[@]} -eq 0 ]]; then
+  echo "[!] No Vault secret yet for selected staging — push env to Vault first"
+  exit 0
+fi
+
+echo ""
+echo "CI: scoped read token → VAULT_READ_TOKEN on origin (live=GitHub, test=GitLab)"
+read -r -p "Create token(s) and sync to remote CI? [y/N]: " sync_ci
+case "$(_lc "${sync_ci:-}")" in
+  y|yes) issue_ci_read_tokens "${CI_TARGETS[@]}" ;;
+  *) echo "[i] Skipped CI sync" ;;
+esac
+
+echo "[+] Done"

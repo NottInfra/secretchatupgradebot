@@ -1,0 +1,17 @@
+name: deploy-live
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, live, nottinfra]
+    env:
+      VAULT_ADDR: http://vault:8200
+      VAULT_READ_TOKEN: ${{ secrets.VAULT_READ_TOKEN }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./release/production.sh

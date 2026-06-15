@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Release: commit + push → mono CI/CD pipeline (live GitHub / test GitLab).
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[[ -n "$ROOT" ]] || ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+# shellcheck source=lib/project.sh
+source "${ROOT}/cmd/lib/project.sh"
+
+[[ -f "$(project_file)" ]] || { echo "[!] Missing docs/project.yml"; exit 1; }
+
+wire_remotes() {
+  local live_remote live_url test_remote test_url
+  live_remote="$(project_yaml_get remotes.live.remote)"
+  live_url="$(project_yaml_get remotes.live.url)"
+  test_remote="$(project_yaml_get remotes.test.remote)"
+  test_url="$(project_yaml_get remotes.test.url)"
+
+  if [[ "$live_url" == *YOUR_ORG* || "$test_url" == *YOUR_GROUP* ]]; then
+    echo "[!] Set real URLs in docs/project.yml first"
+    exit 1
+  fi
+
+  wire_one() {
+    local name="$1" url="$2"
+    if git remote get-url "$name" &>/dev/null; then
+      git remote set-url "$name" "$url"
+    else
+      git remote add "$name" "$url"
+    fi
+  }
+
+  wire_one "$live_remote" "$live_url"
+  wire_one "$test_remote" "$test_url"
+}
+
+wire_remotes
+
+echo ""
+echo "Release channel:"
+echo "  1) live  → $(project_yaml_get remotes.live.remote) / $(project_yaml_get remotes.live.branch)"
+echo "  2) test   → $(project_yaml_get remotes.test.remote) / $(project_yaml_get remotes.test.branch)"
+read -r -p "Choose 1/2 [1]: " choice
+choice="${choice:-1}"
+
+case "$choice" in
+  1) CHANNEL=live ;;
+  2) CHANNEL=test ;;
+  *) echo "[!] Invalid choice"; exit 1 ;;
+esac
+
+project_load_staging "$CHANNEL"
+
+read -r -p "Commit message: " COMMIT_MSG
+if [[ -z "${COMMIT_MSG// }" ]]; then
+  echo "[!] Commit message required"
+  exit 1
+fi
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  git add -A
+  git commit -m "$COMMIT_MSG"
+else
+  echo "[i] Working tree clean — pushing existing commits only"
+fi
+
+echo "[+] Pushing ${CHANNEL} → ${REMOTE_NAME} ${EXPECTED_BRANCH} (${PROJECT_NAME})"
+git push "$REMOTE_NAME" "HEAD:${EXPECTED_BRANCH}"
+echo "[+] CI on ${MONO_HOST} → ${RELEASE_FILE}"

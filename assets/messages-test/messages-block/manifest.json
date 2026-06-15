@@ -1,0 +1,10 @@
+{
+  "experiment": "level3_messages_block",
+  "variants": [
+    {
+      "id": "test",
+      "file": "variant-test.html",
+      "weight": 1
+    }
+  ]
+}

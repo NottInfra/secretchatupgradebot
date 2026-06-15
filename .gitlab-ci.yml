@@ -1,0 +1,36 @@
+stages:
+  - build
+  - scan
+  - deploy
+
+variables:
+  VAULT_ADDR: http://vault:8200
+
+.build_rules: &build_rules
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+build:
+  stage: build
+  tags: [self-hosted, test]
+  <<: *build_rules
+  script:
+    - ./release/test.sh build
+
+trivy:
+  stage: scan
+  tags: [self-hosted, test]
+  needs: [build]
+  <<: *build_rules
+  script:
+    - ./release/test.sh scan
+
+deploy:
+  stage: deploy
+  tags: [self-hosted, test]
+  needs: [build, trivy]
+  <<: *build_rules
+  script:
+    - ./release/test.sh deploy
