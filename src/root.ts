@@ -40,9 +40,13 @@ void startApp().catch((error) => {
 export async function startApp(): Promise<void> {
   const appTracer = getTracer("app");
 
-  await withSpan(appTracer, "app.startup", async () => {
-    const env = await withSpan(appTracer, "app.init_env", async () => initEnv());
-    await withSpan(appTracer, "app.init_telemetry", async () => initTelemetry());
+  const env = await withSpan(appTracer, "app.init_env", async () => initEnv());
+  await withSpan(appTracer, "app.init_telemetry", async () => initTelemetry());
+
+  const { botService, authHttpService, mtprotoSessions, logger } = await withSpan(
+    appTracer,
+    "app.startup",
+    async () => {
     store = new Store();
     const logger = new Logger();
     const analytics = new Analytics();
@@ -140,21 +144,24 @@ export async function startApp(): Promise<void> {
       logger
     );
 
-    await withSpan(appTracer, "app.start_auth_http", async () => authHttpService.start());
-    await withSpan(appTracer, "app.start_mgmt_bot", async () => botService.start());
+    return { botService, authHttpService, mtprotoSessions, logger };
+    }
+  );
 
-    const shutdown = async () => {
-      await withSpan(appTracer, "app.shutdown", async () => {
-        logger.info("shutdown_requested");
-        await botService.stop();
-        await authHttpService.stop();
-        await mtprotoSessions.stop();
-        await store.close();
-        await shutdownTelemetry();
-        process.exit(0);
-      });
-    };
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
-  });
+  await withSpan(appTracer, "app.start_auth_http", async () => authHttpService.start());
+  await withSpan(appTracer, "app.start_mgmt_bot", async () => botService.start());
+
+  const shutdown = async () => {
+    await withSpan(appTracer, "app.shutdown", async () => {
+      logger.info("shutdown_requested");
+      await botService.stop();
+      await authHttpService.stop();
+      await mtprotoSessions.stop();
+      await store.close();
+      await shutdownTelemetry();
+      process.exit(0);
+    });
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }

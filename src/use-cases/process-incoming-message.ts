@@ -71,6 +71,20 @@ export class ProcessIncomingMessageUseCase {
       return;
     }
 
+    if (message.source === "bot_api_automation" && message.senderId === message.sessionId) {
+      this.analytics.trackEvent("moderation_skipped_owner_outbound", {
+        senderId: message.senderId,
+        chatId: message.chatId,
+        sessionId: message.sessionId
+      });
+      this.logger.info("moderation_skipped_owner_outbound", {
+        senderId: message.senderId,
+        chatId: message.chatId,
+        sessionId: message.sessionId
+      });
+      return;
+    }
+
     const msgId = message.telegramMessageId;
     if (msgId != null && msgId > 0) {
       const claimed = await withSpan(moderationTracer, "moderation.dedupe", async () =>

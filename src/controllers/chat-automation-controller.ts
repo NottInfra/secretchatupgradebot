@@ -37,6 +37,8 @@ type AutomationMessageShape = {
   from?: { id: number; is_bot?: boolean; username?: string };
   text?: string;
   business_connection_id?: string;
+  /** Present when the connected bot sent this message on behalf of the business account. */
+  sender_business_bot?: { id: number; username?: string };
 };
 
 function extractAutomationMessage(update: Record<string, unknown>): AutomationMessageShape | undefined {
@@ -147,11 +149,33 @@ export class ChatAutomationController {
           typeof msg.text === "string" && msg.text.trim().length > 0 ? msg.text : "[non-text message]";
         const senderUsername =
           typeof from.username === "string" && from.username.length > 0 ? from.username : undefined;
+        const senderId = String(from.id);
+
+        // Bot API echoes of our automated replies (sendBusiness*).
+        if (msg.sender_business_bot != null) {
+          this.logger.info("chat_automation_skipped_bot_business_send", {
+            ownerUserId,
+            chatId: String(msg.chat.id),
+            messageId: msg.message_id,
+            botId: msg.sender_business_bot.id
+          });
+          return true;
+        }
+
+        // Manual replies from the moderated account owner — not inbound customer traffic.
+        if (senderId === ownerUserId) {
+          this.logger.info("chat_automation_skipped_owner_outbound", {
+            ownerUserId,
+            chatId: String(msg.chat.id),
+            messageId: msg.message_id
+          });
+          return true;
+        }
 
         this.logger.info("chat_automation_inbound", {
           ownerUserId,
           chatId: String(msg.chat.id),
-          senderId: String(from.id),
+          senderId,
           messageId: msg.message_id,
           businessConnectionId: bcId
         });
@@ -160,7 +184,7 @@ export class ChatAutomationController {
           await this.processIncoming.execute({
             sessionId: ownerUserId,
             chatId: String(msg.chat.id),
-            senderId: String(from.id),
+            senderId,
             senderUsername,
             sessionOwnerUsername,
             senderIsBot: Boolean(from.is_bot),
