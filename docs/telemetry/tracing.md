@@ -75,6 +75,7 @@ Naming: `workflow.step`. Tracers are scoped by domain (`app`, `moderation`, `onb
 | `app.shutdown` | `app` | — | `src/root.ts` |
 | `user.ensure` | `user` | `bot.command` (text path) | `src/middleware/handle-user-middleware.ts` |
 | `bot.command` | `bot` | — | `src/routes/bot.ts` |
+| `bot.callback` | `bot` | inline button (`owner_block:*`) | `src/routes/bot.ts` |
 | `policy.send` | `policy` | `bot.command` | `src/use-cases/handle-policy.ts` |
 | `onboarding.flow` | `onboarding` | `bot.command` (`/start`) | `src/use-cases/onboarding.ts` |
 | `onboarding.connect` | `onboarding` | `onboarding.flow` | `src/use-cases/onboarding.ts` |
@@ -91,6 +92,9 @@ Naming: `workflow.step`. Tracers are scoped by domain (`app`, `moderation`, `onb
 | `moderation.assign_tier` | `moderation` | `moderation.process_incoming` | `src/use-cases/process-incoming-message.ts` |
 | `moderation.send_reply` | `moderation` | `moderation.process_incoming` | `src/use-cases/process-incoming-message.ts` |
 | `moderation.queue_block` | `moderation` | `moderation.process_incoming` | `src/use-cases/process-incoming-message.ts` |
+| `moderation.prior_block_prompt` | `moderation` | first warning + cross-account prior block | `src/use-cases/send-prior-block-owner-prompt.ts` |
+| `moderation.owner_block_callback` | `moderation` | mgmt bot "Block now" button | `src/use-cases/handle-owner-block-callback.ts` |
+| `moderation.execute_owner_block` | `moderation` | `moderation.owner_block_callback` | `src/use-cases/handle-owner-block-callback.ts` |
 | `moderation.execute_block` | `moderation` | action queue task | `src/use-cases/execute-moderation-action.ts` |
 | `moderation.resolve_peer` | `moderation` | `moderation.execute_block` | `src/use-cases/execute-moderation-action.ts` |
 | `moderation.send_block_message` | `moderation` | `moderation.execute_block` | `src/use-cases/execute-moderation-action.ts` |

@@ -17,6 +17,7 @@ import { AuthChallengeService } from "./services/auth-challenge-service.js";
 import { ClientNotificationService } from "./services/client-notification-service.js";
 import { InboundMessageDedupe } from "./services/inbound-message-dedupe.js";
 import { ExperimentService } from "./services/experiment-service.js";
+import { PendingBlockOfferStore } from "./services/pending-block-offer-store.js";
 import { OnboardingUseCase } from "./use-cases/onboarding.js";
 import { BotRoutes } from "./routes/bot.js";
 import { Analytics } from "./utils/analytics.js";
@@ -25,6 +26,8 @@ import { Logger } from "./utils/logger.js";
 import { HandlePolicyUseCase } from "./use-cases/handle-policy.js";
 import { ProcessIncomingMessageUseCase } from "./use-cases/process-incoming-message.js";
 import { ExecuteModerationActionUseCase } from "./use-cases/execute-moderation-action.js";
+import { HandleOwnerBlockCallbackUseCase } from "./use-cases/handle-owner-block-callback.js";
+import { SendPriorBlockOwnerPromptUseCase } from "./use-cases/send-prior-block-owner-prompt.js";
 import { ToggleModerationUseCase } from "./use-cases/toggle-moderation.js";
 
 let store: Store;
@@ -74,6 +77,24 @@ export async function startApp(): Promise<void> {
       logger
     );
 
+    const pendingBlockOffers = new PendingBlockOfferStore();
+    const priorBlockOwnerPrompt = new SendPriorBlockOwnerPromptUseCase(
+      pendingBlockOffers,
+      notifications,
+      analytics,
+      logger
+    );
+    const handleOwnerBlockCallback = new HandleOwnerBlockCallbackUseCase(
+      pendingBlockOffers,
+      actionLogs,
+      executeModerationAction,
+      mtprotoSessions,
+      experiments,
+      notifications,
+      analytics,
+      logger
+    );
+
     const useCase = new ProcessIncomingMessageUseCase(
       messages,
       inboundDedupe,
@@ -84,7 +105,8 @@ export async function startApp(): Promise<void> {
       logger,
       notifications,
       experiments,
-      mtprotoSessions
+      mtprotoSessions,
+      priorBlockOwnerPrompt
     );
 
     const onboarding = new OnboardingUseCase(
@@ -110,6 +132,7 @@ export async function startApp(): Promise<void> {
         new BotRoutes(bot, {
           controller: botController,
           chatAutomation: chatAutomationController,
+          handleOwnerBlockCallback,
           handleUserMiddleware,
           handlePolicyUseCase
         }).bind(),

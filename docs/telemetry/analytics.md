@@ -95,6 +95,36 @@ No Postgres table. See [tracing.md](tracing.md) for workflow spans (Tempo).
 - **When:** Onboarding auth flow fails
 - **Props:** `userId`, `error`
 
+### `cross_account_prior_block_detected`
+
+- **Source:** `src/use-cases/process-incoming-message.ts`
+- **When:** First warning sent and sender was previously blocked on a different owner's account
+- **Props:** `senderId`, `chatId`, `sessionId`
+
+### `prior_block_owner_prompt_sent`
+
+- **Source:** `src/use-cases/send-prior-block-owner-prompt.ts`
+- **When:** Mgmt bot sends "Block now" inline button to account owner
+- **Props:** `ownerUserId`, `senderId`, `chatId`
+
+### `prior_block_owner_confirmed`
+
+- **Source:** `src/use-cases/handle-owner-block-callback.ts`
+- **When:** Owner taps "Block now" and block succeeds (requires MTProto session from `/start`)
+- **Props:** `ownerUserId`, `senderId`, `chatId`, `experiment`, `variant`
+
+### `prior_block_owner_block_skipped_no_session`
+
+- **Source:** `src/use-cases/handle-owner-block-callback.ts`
+- **When:** Owner tapped block but has no onboarded GramJS session
+- **Props:** `ownerUserId`, `senderId`
+
+### `prior_block_owner_prompt_expired`
+
+- **Source:** `src/use-cases/handle-owner-block-callback.ts`
+- **When:** Stale or invalid block-offer token on callback
+- **Props:** `ownerUserId`, `token`
+
 ### `first_message_reply_sent`
 
 - **Source:** `src/use-cases/process-incoming-message.ts`

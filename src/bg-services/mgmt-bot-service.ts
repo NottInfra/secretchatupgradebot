@@ -6,6 +6,7 @@ import type { Logger } from "../utils/logger.js";
 const MGMT_BOT_ALLOWED_UPDATES = [
   "message",
   "edited_message",
+  "callback_query",
   "business_connection",
   "business_message",
   "edited_business_message",

@@ -2,6 +2,7 @@ import type { Telegraf } from "telegraf";
 import type { BotController } from "../controllers/bot-controller.js";
 import type { ChatAutomationController } from "../controllers/chat-automation-controller.js";
 import type { HandleUserMiddleware } from "../middleware/handle-user-middleware.js";
+import type { HandleOwnerBlockCallbackUseCase } from "../use-cases/handle-owner-block-callback.js";
 import type { HandlePolicyUseCase } from "../use-cases/handle-policy.js";
 import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
 
@@ -10,6 +11,7 @@ const botTracer = getTracer("bot");
 export type BotRouteDeps = {
   controller: BotController;
   chatAutomation: ChatAutomationController;
+  handleOwnerBlockCallback: HandleOwnerBlockCallbackUseCase;
   handleUserMiddleware: HandleUserMiddleware;
   handlePolicyUseCase: HandlePolicyUseCase;
 };
@@ -25,12 +27,40 @@ export class BotRoutes {
    * then existing command + onboarding handlers.
    */
   bind(): void {
-    const { controller, chatAutomation, handleUserMiddleware, handlePolicyUseCase } = this.deps;
+    const {
+      controller,
+      chatAutomation,
+      handleOwnerBlockCallback,
+      handleUserMiddleware,
+      handlePolicyUseCase
+    } = this.deps;
 
     this.bot.use(async (ctx, next) => {
       const handled = await chatAutomation.tryHandle(ctx);
       if (handled) return;
       await next();
+    });
+
+    this.bot.on("callback_query", async (ctx) => {
+      const userId = ctx.from?.id;
+      if (!userId || !("data" in ctx.callbackQuery) || !ctx.callbackQuery.data?.startsWith("owner_block:")) {
+        return;
+      }
+      const data = ctx.callbackQuery.data;
+
+      await withSpan(botTracer, "bot.callback", async (span) => {
+        setSpanAttributes(span, {
+          "telegram.user_id": userId,
+          "bot.callback": "owner_block"
+        });
+        const token = data.slice("owner_block:".length);
+        const message = await handleOwnerBlockCallback.execute(userId, token);
+        if (message.length > 200) {
+          await ctx.answerCbQuery(message.slice(0, 200), { show_alert: true });
+        } else {
+          await ctx.answerCbQuery(message);
+        }
+      });
     });
 
     this.bot.on("text", async (ctx) => {

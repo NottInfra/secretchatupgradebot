@@ -46,7 +46,8 @@ export class Store {
           return;
         }
         case "action_logs.insert": {
-          const [senderId, chatId, decision, createdAt] = args as [
+          const [senderId, chatId, sessionId, decision, createdAt] = args as [
+            string,
             string,
             string,
             ModerationDecision,
@@ -55,7 +56,12 @@ export class Store {
           await this.backing.query(
             `INSERT INTO action_logs(sender_id, chat_id, decision_json, created_at)
              VALUES ($1, $2, $3::jsonb, $4::timestamptz)`,
-            [senderId, chatId, JSON.stringify(decision), createdAt]
+            [
+              senderId,
+              chatId,
+              JSON.stringify({ ...decision, sessionId }),
+              createdAt
+            ]
           );
           this.invalidateQueryCache();
           return;
@@ -241,16 +247,30 @@ export class Store {
         );
         return Number(rows[0]?.n ?? 0) as T;
       }
-      case "action_logs.has_prior_block": {
-        const [senderId, chatId] = args as [string, string];
+      case "action_logs.has_prior_block_in_session": {
+        const [senderId, sessionId] = args as [string, string];
         const rows = await this.backing.query<{ exists: boolean }>(
           `SELECT EXISTS (
              SELECT 1 FROM action_logs
              WHERE sender_id = $1
-               AND chat_id = $2
                AND decision_json->>'action' = 'block'
+               AND decision_json->>'sessionId' = $2
            ) AS exists`,
-          [senderId, chatId]
+          [senderId, sessionId]
+        );
+        return Boolean(rows[0]?.exists) as T;
+      }
+      case "action_logs.has_prior_block_by_other_session": {
+        const [senderId, sessionId] = args as [string, string];
+        const rows = await this.backing.query<{ exists: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM action_logs
+             WHERE sender_id = $1
+               AND decision_json->>'action' = 'block'
+               AND decision_json->>'sessionId' IS NOT NULL
+               AND decision_json->>'sessionId' <> $2
+           ) AS exists`,
+          [senderId, sessionId]
         );
         return Boolean(rows[0]?.exists) as T;
       }

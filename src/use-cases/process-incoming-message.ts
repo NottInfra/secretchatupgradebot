@@ -11,6 +11,7 @@ import type { TelegramClient } from "telegram";
 import type { MtprotoSessionService } from "../bg-services/mtproto-session-service.js";
 import { ActionQueueService } from "../bg-services/action-queue-service.js";
 import { ExecuteModerationActionUseCase } from "./execute-moderation-action.js";
+import { SendPriorBlockOwnerPromptUseCase } from "./send-prior-block-owner-prompt.js";
 import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
 import type { Span } from "@opentelemetry/api";
 
@@ -33,7 +34,8 @@ export class ProcessIncomingMessageUseCase {
     private readonly logger: Logger,
     private readonly notifications: ClientNotificationService,
     private readonly experiments: ExperimentService,
-    private readonly mtprotoSessions: MtprotoSessionService
+    private readonly mtprotoSessions: MtprotoSessionService,
+    private readonly priorBlockOwnerPrompt: SendPriorBlockOwnerPromptUseCase
   ) {}
 
   async execute(message: IncomingMessage): Promise<void> {
@@ -88,15 +90,16 @@ export class ProcessIncomingMessageUseCase {
     }
 
     await this.messages.save(message);
-    if (await this.actions.hasPriorBlock(message.senderId, message.chatId)) {
+    if (await this.actions.hasPriorBlockInSession(message.senderId, message.sessionId)) {
       const decision: ModerationDecision = {
         action: "ignore",
         confidence: 1,
-        reason: "prior_block_in_chat_skip"
+        reason: "prior_block_in_session_skip"
       };
       this.actions.saveDeferred({
         senderId: message.senderId,
         chatId: message.chatId,
+        sessionId: message.sessionId,
         decision
       });
       this.analytics.trackEvent("moderation_decision", {
@@ -109,10 +112,16 @@ export class ProcessIncomingMessageUseCase {
       });
       this.logger.info("moderation_skipped_prior_block", {
         senderId: message.senderId,
-        chatId: message.chatId
+        chatId: message.chatId,
+        sessionId: message.sessionId
       });
       return;
     }
+
+    const priorBlockOtherAccount = await this.actions.hasPriorBlockByOtherSession(
+      message.senderId,
+      message.sessionId
+    );
 
     const count = await withSpan(moderationTracer, "moderation.load_history", async () =>
       this.messages.countBySender(message.senderId)
@@ -162,6 +171,7 @@ export class ProcessIncomingMessageUseCase {
       this.actions.saveDeferred({
         senderId: message.senderId,
         chatId: message.chatId,
+        sessionId: message.sessionId,
         decision
       });
       const eventName =
@@ -180,12 +190,22 @@ export class ProcessIncomingMessageUseCase {
         variant: tierAssignment.variantId,
         hasMedia: Boolean(tierAssignment.mediaPath)
       });
+
+      if (tier === "first_warning" && priorBlockOtherAccount) {
+        this.analytics.trackEvent("cross_account_prior_block_detected", {
+          senderId: message.senderId,
+          chatId: message.chatId,
+          sessionId: message.sessionId
+        });
+        await this.priorBlockOwnerPrompt.execute(message, tierAssignment);
+      }
       return;
     }
 
     this.actions.saveDeferred({
       senderId: message.senderId,
       chatId: message.chatId,
+      sessionId: message.sessionId,
       decision
     });
 
