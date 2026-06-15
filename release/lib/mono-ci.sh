@@ -28,9 +28,13 @@ mono_trivy_scan() {
 mono_sonar_scan() {
   local project_key="$1" sources="${2:-src}" network="${MONO_NETWORK:-$(_mono_ci_network)}"
   local sonar_url="${SONAR_HOST_URL:-http://sonarqube:9000}"
-  local scanner="${SONAR_SCANNER_IMAGE:-sonarsource/sonar-scanner-cli:11.1.1.1667_4.2.1}"
+  # Pin minor tag — full build tags change often; 11.1.1.1667_4.2.1 was invalid on Docker Hub.
+  local scanner="${SONAR_SCANNER_IMAGE:-sonarsource/sonar-scanner-cli:11.5}"
 
-  [[ -n "${SONAR_TOKEN:-}" ]] || return 0
+  if [[ -z "${SONAR_TOKEN:-}" ]]; then
+    echo "[i] SONAR_TOKEN unset — skip sonar scan"
+    return 0
+  fi
 
   docker run --rm --network "$network" \
     -e SONAR_HOST_URL="$sonar_url" \
@@ -39,8 +43,7 @@ mono_sonar_scan() {
     "$scanner" \
     sonar-scanner \
       -Dsonar.projectKey="$project_key" \
-      -Dsonar.sources="$sources" \
-    || true
+      -Dsonar.sources="$sources"
 }
 
 # Host daemon push (127.0.0.1:5000) + local tag for compose (registry:5000 on mono network).
