@@ -6,6 +6,11 @@ stages:
 variables:
   VAULT_ADDR: http://vault:8200
 
+# docker:24 (runner default) is Alpine — release/*.sh need bash.
+default:
+  before_script:
+    - apk add --no-cache bash
+
 .build_rules: &build_rules
   rules:
     - if: $CI_COMMIT_BRANCH == "develop"
