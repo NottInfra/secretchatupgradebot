@@ -26,12 +26,16 @@ import { ProcessIncomingMessageUseCase } from "./use-cases/process-incoming-mess
 import { ExecuteModerationActionUseCase } from "./use-cases/execute-moderation-action.js";
 import { ToggleModerationUseCase } from "./use-cases/toggle-moderation.js";
 
-export const store = new Store();
+let store: Store;
 
-void startApp();
+void startApp().catch((error) => {
+  console.error("[!] startup failed:", error);
+  process.exit(1);
+});
 
 export async function startApp(): Promise<void> {
   const env = await initEnv();
+  store = new Store();
   const logger = new Logger();
   const analytics = new Analytics(store, logger);
   const handleUserMiddleware = new HandleUserMiddleware(store, analytics);
