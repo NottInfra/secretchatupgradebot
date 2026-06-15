@@ -5,10 +5,16 @@ services:
   app:
     image: ${IMAGE}
     container_name: ${CONTAINER_NAME}
+    dns:
+      - adguard
     environment:
       NODE_ENV: production
       VAULT_ADDR: http://vault:8200
       VAULT_READ_TOKEN: ${VAULT_READ_TOKEN}
+      HTTPS_PROXY: socks5h://whonix-socks-front:9050
+      HTTP_PROXY: socks5h://whonix-socks-front:9050
+      ALL_PROXY: socks5h://whonix-socks-front:9050
+      NO_PROXY: vault,registry,localhost,127.0.0.1
     ports:
       - "${HOST_PORT}:${CONTAINER_PORT}"
     networks:

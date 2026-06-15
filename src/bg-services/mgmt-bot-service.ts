@@ -1,5 +1,6 @@
 import { Telegraf } from "telegraf";
 import { ClientNotificationService } from "../services/client-notification-service.js";
+import { httpsAgentFromEnv } from "../utils/outbound-proxy.js";
 import type { Logger } from "../utils/logger.js";
 
 export class MgmtBotService {
@@ -17,7 +18,8 @@ export class MgmtBotService {
       this.logger.warn("mgmt_bot_not_started_missing_token");
       return;
     }
-    const bot = new Telegraf(this.token);
+    const agent = httpsAgentFromEnv();
+    const bot = new Telegraf(this.token, agent ? { telegram: { agent } } : {});
     this.bindRoutes(bot);
     // Attach early so notification sends work during startup too.
     this.notifications.attachBot(bot);

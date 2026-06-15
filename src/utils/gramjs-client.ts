@@ -2,6 +2,7 @@ import { TelegramClient } from "telegram";
 import { LogLevel } from "telegram/extensions/Logger.js";
 import type { StringSession } from "telegram/sessions/index.js";
 import type { Logger } from "./logger.js";
+import { gramjsSocksProxyFromEnv } from "./outbound-proxy.js";
 
 export type GramjsClientParams = {
   connectionRetries?: number;
@@ -51,9 +52,11 @@ export function createTelegramClient(
   params: GramjsClientParams,
   options?: { sessionId?: string; logger?: Logger }
 ): TelegramClient {
+  const proxy = gramjsSocksProxyFromEnv();
   const client = new TelegramClient(session, apiId, apiHash, {
     connectionRetries: params.connectionRetries ?? 5,
-    useWSS: params.useWSS ?? true
+    useWSS: proxy ? false : (params.useWSS ?? true),
+    proxy
   });
   attachGramjsGuards(client, options ?? {});
   return client;
