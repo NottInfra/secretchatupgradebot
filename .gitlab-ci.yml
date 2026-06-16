@@ -40,7 +40,7 @@ unit-test:
   needs: [build]
   <<: *build_rules
   before_script:
-    - apk add --no-cache bash
+    - apk add --no-cache bash make
   script:
     - bash ./release/steps/unit-test.sh test
   artifacts:
