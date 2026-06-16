@@ -20,6 +20,13 @@ fi
   exit 1
 }
 
+if command -v git >/dev/null 2>&1; then
+  if git -C "$WORKDIR" rev-parse --is-shallow-repository 2>/dev/null | grep -q '^true$'; then
+    echo "[!] shallow git clone — set GIT_DEPTH: \"0\" in CI for Sonar SCM/blame" >&2
+    exit 1
+  fi
+fi
+
 if command -v sonar-scanner >/dev/null 2>&1; then
   echo "[+] sonar-scanner (job image) workdir=${WORKDIR}"
   (

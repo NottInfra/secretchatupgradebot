@@ -6,6 +6,7 @@ stages:
 
 variables:
   VAULT_ADDR: http://vault:8200
+  GIT_DEPTH: "0"
 
 # docker:24 (runner default) is Alpine — release/*.sh need bash.
 default:
