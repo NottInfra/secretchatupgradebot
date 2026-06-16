@@ -22,7 +22,7 @@ export class MgmtBotService {
     private readonly bindRoutes: (bot: Telegraf) => void,
     private readonly notifications: ClientNotificationService,
     private readonly logger: Logger
-  ) {}
+  ) { }
 
   async start(): Promise<void> {
     if (!this.token) {

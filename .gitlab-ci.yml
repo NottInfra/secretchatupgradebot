@@ -23,7 +23,7 @@ build:
   tags: [self-hosted, test]
   <<: *build_rules
   script:
-    - bash ./release/test.sh build
+    - bash ./release/steps/build.sh test
 
 trivy:
   stage: scan
@@ -31,7 +31,7 @@ trivy:
   needs: [build]
   <<: *build_rules
   script:
-    - bash ./release/test.sh scan
+    - bash ./release/steps/trivy.sh test
 
 unit-test:
   stage: scan
@@ -39,9 +39,10 @@ unit-test:
   tags: [self-hosted, test]
   needs: [build]
   <<: *build_rules
+  before_script:
+    - apk add --no-cache bash
   script:
-    - npm ci
-    - npm run test:coverage
+    - bash ./release/steps/unit-test.sh test
   artifacts:
     paths:
       - coverage/
@@ -57,7 +58,7 @@ sonar:
     SONAR_HOST_URL: http://sonarqube:9000
   before_script: []
   script:
-    - bash ./release/test.sh sonar
+    - bash ./release/steps/sonar.sh test
 
 deploy:
   stage: deploy
@@ -65,4 +66,4 @@ deploy:
   needs: [build, trivy, sonar]
   <<: *build_rules
   script:
-    - bash ./release/test.sh deploy
+    - bash ./release/steps/deploy.sh test

@@ -14,5 +14,9 @@ jobs:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      # production.sh all → build → trivy → sonar → push → deploy
-      - run: bash ./release/production.sh
+      - run: bash ./release/steps/build.sh live
+      - run: bash ./release/steps/unit-test.sh live
+      - run: bash ./release/steps/trivy.sh live
+      - run: bash ./release/steps/sonar.sh live
+      - run: bash ./release/steps/push.sh live
+      - run: bash ./release/steps/deploy.sh live

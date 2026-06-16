@@ -2,7 +2,7 @@ import { Input, Telegraf } from "telegraf";
 import fs from "node:fs";
 import path from "node:path";
 import { Logger } from "../utils/logger.js";
-import { htmlToPlainText } from "../utils/html-to-plain-text.js";
+import { htmlToPlainText } from "./html-to-plain-text.js";
 import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
 
 const notificationTracer = getTracer("notification");

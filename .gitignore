@@ -12,3 +12,5 @@ data/*
 dist/
 node_modules/
 release/.compose.generated.yml
+coverage/
+.trivy-cache/

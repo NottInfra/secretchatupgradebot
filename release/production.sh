@@ -1,75 +1,30 @@
 #!/usr/bin/env bash
-# Live pipeline — GitHub Actions calls this; compose in release/production.yml
+# Live pipeline wrapper — delegates to standalone release/steps scripts.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# shellcheck source=../cmd/lib/project.sh
-source "${ROOT}/cmd/lib/project.sh"
-# shellcheck source=lib/mono-ci.sh
-source "${ROOT}/release/lib/mono-ci.sh"
-
-project_load_staging live
-
-branch_gate() {
-  local ref="${GITHUB_REF_NAME:-${CI_COMMIT_BRANCH:-}}"
-  if [[ -n "$ref" && "$ref" != "$EXPECTED_BRANCH" ]]; then
-    echo "Skip: ${ref} != ${EXPECTED_BRANCH}"
-    exit 0
-  fi
-}
-
 step="${1:-all}"
-
-run_build() {
-  branch_gate
-  docker build -t "$IMAGE_HOST" .
-  if [[ "$IMAGE_HOST" != "$IMAGE" ]]; then
-    docker tag "$IMAGE_HOST" "$IMAGE"
-  fi
-}
-
-run_scan() {
-  branch_gate
-  mono_trivy_scan "$IMAGE"
-}
-
-run_sonar() {
-  branch_gate
-  mono_sonar_scan "$SONAR_KEY"
-}
-
-run_push() {
-  branch_gate
-  docker push "$IMAGE_HOST"
-  if [[ "$IMAGE_HOST" != "$IMAGE" ]]; then
-    docker tag "$IMAGE_HOST" "$IMAGE"
-  fi
-}
-
-run_deploy() {
-  branch_gate
-  export IMAGE CONTAINER_NAME HOST_PORT CONTAINER_PORT VAULT_READ_TOKEN
-  docker compose -f "$RELEASE_FILE" up -d --force-recreate --remove-orphans
-  docker compose -f "$RELEASE_FILE" ps
-}
+run() { bash "${ROOT}/release/steps/$1.sh" live; }
 
 case "$step" in
-  build) run_build ;;
-  scan) run_scan ;;
-  sonar) run_sonar ;;
-  push) run_push ;;
-  deploy) run_deploy ;;
+  build) run build ;;
+  unit-test) run unit-test ;;
+  scan|trivy) run trivy ;;
+  sonar) run sonar ;;
+  push) run push ;;
+  deploy) run deploy ;;
   all)
-    run_build
-    run_scan
-    run_sonar
-    run_push
-    run_deploy
+    run build
+    run unit-test
+    run trivy
+    run sonar
+    run push
+    run deploy
     ;;
   *)
-    echo "[!] unknown step: $step (build|scan|sonar|push|deploy|all)" >&2
+    echo "[!] unknown step: $step (build|unit-test|scan|sonar|push|deploy|all)" >&2
     exit 1
     ;;
 esac

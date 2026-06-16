@@ -4,7 +4,7 @@ import { InboundMessageDedupe } from "../services/inbound-message-dedupe.js";
 import { ClientNotificationService } from "../services/client-notification-service.js";
 import { ExperimentService, type Assignment } from "../services/experiment-service.js";
 import type { IncomingMessage, ModerationDecision } from "../types.js";
-import { decisionForTier, moderationTierForCount, type ModerationTier } from "../utils/moderation-tier.js";
+import { decisionForTier, moderationTierForCount, type ModerationTier } from "../services/moderation-tier.js";
 import { Analytics } from "../utils/analytics.js";
 import { Logger } from "../utils/logger.js";
 import { resolveOutboundPeer } from "../services/telegram/resolve-outbound-peer.js";
