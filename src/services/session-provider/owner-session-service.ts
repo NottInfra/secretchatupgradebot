@@ -111,6 +111,8 @@ export class OwnerSessionService {
       accountId = onboarded.accountId;
     }
 
+    if (!accountId) return undefined;
+
     return this.grantSession(service, accountId, ownerId);
   }
 
