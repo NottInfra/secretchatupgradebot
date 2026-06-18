@@ -1,7 +1,6 @@
-import { Api, TelegramClient } from "telegram";
 import type { IncomingMessage, ModerationDecision } from "../types.js";
 import type { ClientNotificationService } from "../services/client-notification-service.js";
-import { resolveOutboundPeer } from "../services/telegram/resolve-outbound-peer.js";
+import type { TdlibClient } from "../services/telegram/tdlib-client.js";
 import type { Logger } from "../utils/logger.js";
 import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
 
@@ -14,8 +13,6 @@ type BlockInput = {
   moderationIncoming?: IncomingMessage;
 };
 
-type BlockEntity = Awaited<ReturnType<TelegramClient["getInputEntity"]>>;
-
 export class ExecuteModerationActionUseCase {
   constructor(
     private readonly notifications: ClientNotificationService,
@@ -23,12 +20,11 @@ export class ExecuteModerationActionUseCase {
   ) {}
 
   async execute(
-    client: TelegramClient,
+    client: TdlibClient,
     input: {
       senderId: string;
       decision: ModerationDecision;
       blockMessageHtml?: string;
-      /** MTProto path: peer resolution matches warning replies (Saved Messages / min peers). */
       moderationIncoming?: IncomingMessage;
     }
   ): Promise<void> {
@@ -47,7 +43,7 @@ export class ExecuteModerationActionUseCase {
     );
   }
 
-  private async executeBlock(client: TelegramClient, input: BlockInput): Promise<void> {
+  private async executeBlock(client: TdlibClient, input: BlockInput): Promise<void> {
     const body = input.blockMessageHtml?.trim();
     if (!body) {
       this.logger.error("missing_block_template", { senderId: input.senderId });
@@ -72,43 +68,11 @@ export class ExecuteModerationActionUseCase {
         replyToMsgId
       );
       if (!sent) return;
-      const blockEntity = await this.resolveBlockEntity(client, input);
-      if (!blockEntity) return;
-      await this.blockContact(client, blockEntity, input.senderId);
+      await this.blockContact(client, input.senderId);
       return;
     }
 
-    const entity = await this.resolveBlockEntity(client, input);
-    if (!entity) return;
-
-    const sent = await this.sendBlockViaMtproto(client, input, entity, body, replyToMsgId);
-    if (!sent) return;
-
-    if (entity instanceof Api.InputPeerSelf) {
-      this.logger.info("contacts_block_skipped_self_peer", { senderId: input.senderId });
-      return;
-    }
-
-    await this.blockContact(client, entity, input.senderId);
-  }
-
-  private async resolveBlockEntity(
-    client: TelegramClient,
-    input: BlockInput
-  ): Promise<BlockEntity | undefined> {
-    try {
-      return await withSpan(moderationTracer, "moderation.resolve_peer", async () =>
-        input.moderationIncoming == null
-          ? client.getInputEntity(input.senderId)
-          : resolveOutboundPeer(client, input.moderationIncoming, this.logger)
-      );
-    } catch (error) {
-      this.logger.error("failed_to_resolve_block_peer", {
-        senderId: input.senderId,
-        error: String(error)
-      });
-      return undefined;
-    }
+    this.logger.warn("block_without_business_automation", { senderId: input.senderId });
   }
 
   private async sendBlockViaBusinessAutomation(
@@ -141,52 +105,30 @@ export class ExecuteModerationActionUseCase {
     return true;
   }
 
-  private async sendBlockViaMtproto(
-    client: TelegramClient,
-    input: BlockInput,
-    entity: BlockEntity,
-    body: string,
-    replyToMsgId: number | undefined
-  ): Promise<boolean> {
-    try {
-      const sent = await withSpan(moderationTracer, "moderation.send_block_message", async () =>
-        client.sendMessage(entity, {
-          message: body,
-          parseMode: "html",
-          ...(replyToMsgId == null ? {} : { replyTo: replyToMsgId })
-        })
-      );
-      const sentId = sent instanceof Api.Message ? sent.id : undefined;
-      this.logger.info("block_notice_dm_sent", {
-        senderId: input.senderId,
-        chatId: input.moderationIncoming?.chatId,
-        telegramSentMessageId: sentId,
-        replyToMessageId: replyToMsgId,
-        via: "mtproto"
-      });
-      return true;
-    } catch (error) {
-      this.logger.error("failed_to_send_block_dm", {
-        senderId: input.senderId,
-        error: String(error)
-      });
-      return false;
-    }
-  }
-
-  private async blockContact(
-    client: TelegramClient,
-    entity: BlockEntity,
-    senderId: string
-  ): Promise<void> {
-    if (entity instanceof Api.InputPeerSelf) {
-      this.logger.info("contacts_block_skipped_self_peer", { senderId });
+  private async blockContact(client: TdlibClient, senderId: string): Promise<void> {
+    const userId = Number(senderId);
+    if (!Number.isFinite(userId)) {
+      this.logger.error("failed_contacts_block_invalid_sender", { senderId });
       return;
     }
 
     try {
+      const me = await client.invoke({ _: "getMe" }) as { id?: number };
+      if (me.id === userId) {
+        this.logger.info("contacts_block_skipped_self_peer", { senderId });
+        return;
+      }
+    } catch (error) {
+      this.logger.warn("contacts_block_get_me_failed", { senderId, error: String(error) });
+    }
+
+    try {
       await withSpan(moderationTracer, "moderation.block_contact", async () =>
-        client.invoke(new Api.contacts.Block({ id: entity }))
+        client.invoke({
+          _: "blockMessageSender",
+          sender_id: { _: "messageSenderUser", user_id: userId },
+          block_list: { _: "blockListMain" }
+        })
       );
       this.logger.info("sender_blocked", { senderId });
     } catch (error) {

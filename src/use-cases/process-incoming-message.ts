@@ -7,28 +7,21 @@ import type { IncomingMessage, ModerationDecision } from "../types.js";
 import { decisionForTier, moderationTierForCount, type ModerationTier } from "../services/moderation-tier.js";
 import { Analytics } from "../utils/analytics.js";
 import { Logger } from "../utils/logger.js";
-import { resolveOutboundPeer } from "../services/telegram/resolve-outbound-peer.js";
 import { formatSenderRefHtml } from "../services/telegram/format-sender-ref.js";
-import type { TelegramClient } from "telegram";
-import type { MtprotoSessionService } from "../bg-services/mtproto-session-service.js";
 import { ActionQueueService } from "../bg-services/action-queue-service.js";
 import { ExecuteModerationActionUseCase } from "./execute-moderation-action.js";
 import { SendPriorBlockOwnerPromptUseCase } from "./send-prior-block-owner-prompt.js";
+import type { BlockOnboardingCoordinator } from "../services/session-provider/block-onboarding-coordinator.js";
 import { getTracer, setSpanAttributes, withSpan } from "../utils/telemetry.js";
 import type { Span } from "@opentelemetry/api";
-import path from "node:path";
-import fs from "node:fs";
 
 const moderationTracer = getTracer("moderation");
-const telegramTracer = getTracer("telegram");
 
 const LEVEL1_WARNING_EXPERIMENT_ID = "level1_message_warning";
 const LEVEL2_WARNING_FINAL_EXPERIMENT_ID = "level2_message_warning_final";
 const LEVEL3_BLOCK_EXPERIMENT_ID = "level3_messages_block";
 
 export class ProcessIncomingMessageUseCase {
-  private readonly sessionUsernameByClient = new WeakMap<TelegramClient, string>();
-
   constructor(
     private readonly messages: MessageRepository,
     private readonly dedupe: InboundMessageDedupe,
@@ -39,7 +32,7 @@ export class ProcessIncomingMessageUseCase {
     private readonly logger: Logger,
     private readonly notifications: ClientNotificationService,
     private readonly experiments: ExperimentService,
-    private readonly mtprotoSessions: MtprotoSessionService,
+    private readonly blockOnboarding: BlockOnboardingCoordinator,
     private readonly priorBlockOwnerPrompt: SendPriorBlockOwnerPromptUseCase
   ) {}
 
@@ -263,29 +256,30 @@ export class ProcessIncomingMessageUseCase {
           variant: tierAssignment.variantId
         });
         const blockMessageHtml = await this.buildReplyHtml(message, tierAssignment);
-        const client = await this.mtprotoSessions.getClientForBlock(message.sessionId);
-        if (client) {
-          await this.executeModerationAction.execute(client, {
+        const senderRef = formatSenderRefHtml(message.senderId, message.senderUsername);
+        const blocked = await this.blockOnboarding.executeBlockWithSession(
+          message.sessionId,
+          {
             senderId: message.senderId,
             decision,
             blockMessageHtml,
             moderationIncoming: message
+          },
+          senderRef
+        );
+
+        if (blocked) {
+          const noticeHtml = `We just blocked ${senderRef}. Please unblock them if you'd like any further interaction.`;
+          const sentViaBot = await this.notifications.sendHTML(message.sessionId, noticeHtml);
+          this.analytics.trackEvent("block_notice_sent", {
+            senderId: message.senderId,
+            sessionId: message.sessionId,
+            sentViaBot,
+            experiment: tierAssignment.experimentId,
+            variant: tierAssignment.variantId
           });
         } else {
-          this.logger.error("block_skipped_no_mtproto_session", { sessionId: message.sessionId });
-        }
-        const senderRef = formatSenderRefHtml(message.senderId, message.senderUsername);
-        const noticeHtml = `We just blocked ${senderRef}. Please unblock them if you'd like any further interaction.`;
-        const sentViaBot = await this.notifications.sendHTML(message.sessionId, noticeHtml);
-        this.analytics.trackEvent("block_notice_sent", {
-          senderId: message.senderId,
-          sessionId: message.sessionId,
-          sentViaBot,
-          experiment: tierAssignment.experimentId,
-          variant: tierAssignment.variantId
-        });
-        if (!sentViaBot && client) {
-          await this.sendReply(client, "me", noticeHtml);
+          this.logger.info("block_deferred_for_onboarding", { sessionId: message.sessionId });
         }
       });
     });
@@ -311,50 +305,18 @@ export class ProcessIncomingMessageUseCase {
     };
   }
 
-  private getReplyInputPeer(client: TelegramClient, message: IncomingMessage) {
-    return resolveOutboundPeer(client, message, this.logger);
-  }
-
-  private async sendReply(client: TelegramClient, chatId: string, html: string): Promise<void> {
-    try {
-      const entity = await client.getInputEntity(chatId);
-      await client.sendMessage(entity, { message: html, parseMode: "html" });
-    } catch (error) {
-      this.logger.error("failed_to_send_reply", { chatId, error: String(error) });
-    }
-  }
-
   private async sendReplyToIncoming(message: IncomingMessage, html: string): Promise<void> {
-    if (this.usesBusinessAutomationReply(message)) {
-      const sent = await this.notifications.sendBusinessHTMLReply(this.businessReplyInput(message, html));
-      if (!sent) {
-        this.logger.error("failed_to_send_business_reply", { chatId: message.chatId });
-      }
-      return;
-    }
-
-    const client = await this.mtprotoSessions.getClientForBlock(message.sessionId);
-    if (!client) {
+    if (!this.usesBusinessAutomationReply(message)) {
       this.logger.error("failed_to_send_reply", {
         chatId: message.chatId,
-        error: "mtproto_session_unavailable"
+        error: "business_automation_required"
       });
       return;
     }
 
-    try {
-      const entity = await withSpan(moderationTracer, "moderation.resolve_peer", async () =>
-        this.getReplyInputPeer(client, message)
-      );
-      await withSpan(telegramTracer, "telegram.send_message", async (sendSpan) => {
-        setSpanAttributes(sendSpan, {
-          "telegram.chat_id": message.chatId,
-          "telegram.transport": "mtproto"
-        });
-        await client.sendMessage(entity, { message: html, parseMode: "html" });
-      });
-    } catch (error) {
-      this.logger.error("failed_to_send_reply", { chatId: message.chatId, error: String(error) });
+    const sent = await this.notifications.sendBusinessHTMLReply(this.businessReplyInput(message, html));
+    if (!sent) {
+      this.logger.error("failed_to_send_business_reply", { chatId: message.chatId });
     }
   }
 
@@ -363,109 +325,46 @@ export class ProcessIncomingMessageUseCase {
     html: string,
     mediaPath: string | undefined
   ): Promise<void> {
-    if (this.usesBusinessAutomationReply(message)) {
-      if (mediaPath) {
-        const sent = await this.notifications.sendBusinessMediaReply({
-          ...this.businessReplyInput(message, html),
-          mediaPath
-        });
-        if (!sent) {
-          this.logger.error("failed_to_send_business_media_reply", {
-            chatId: message.chatId,
-            mediaPath
-          });
-        }
-        return;
-      }
-      await this.sendReplyToIncoming(message, html);
-      return;
-    }
-
-    const client = await this.mtprotoSessions.getClientForBlock(message.sessionId);
-    if (!client) {
+    if (!this.usesBusinessAutomationReply(message)) {
       this.logger.error("failed_to_send_reply", {
         chatId: message.chatId,
-        error: "mtproto_session_unavailable"
+        error: "business_automation_required"
       });
       return;
     }
 
-    if (!mediaPath) {
-      await this.sendReplyToIncoming(message, html);
+    if (mediaPath) {
+      const sent = await this.notifications.sendBusinessMediaReply({
+        ...this.businessReplyInput(message, html),
+        mediaPath
+      });
+      if (!sent) {
+        this.logger.error("failed_to_send_business_media_reply", {
+          chatId: message.chatId,
+          mediaPath
+        });
+      }
       return;
     }
-    try {
-      const entity = await withSpan(moderationTracer, "moderation.resolve_peer", async () =>
-        this.getReplyInputPeer(client, message)
-      );
-      await withSpan(telegramTracer, "telegram.send_media", async (sendSpan) => {
-        setSpanAttributes(sendSpan, {
-          "telegram.chat_id": message.chatId,
-          "telegram.transport": "mtproto",
-          "media.path": path.basename(mediaPath),
-          "media.ext": path.extname(mediaPath).toLowerCase() || "unknown"
-        });
-        try {
-          const stat = fs.statSync(mediaPath);
-          setSpanAttributes(sendSpan, { "media.bytes": stat.size });
-        } catch {
-          // optional attribute
-        }
-        await client.sendFile(entity, {
-          file: mediaPath,
-          caption: html,
-          parseMode: "html"
-        });
-      });
-    } catch (error) {
-      this.logger.error("failed_to_send_media_reply", {
-        chatId: message.chatId,
-        mediaPath,
-        error: String(error)
-      });
-      await this.sendReplyToIncoming(message, html);
-    }
+
+    await this.sendReplyToIncoming(message, html);
   }
 
   private async buildReplyHtml(message: IncomingMessage, assignment: Assignment): Promise<string> {
     return this.substituteSessionUsernameHtml(message, assignment.html);
   }
 
-  private async substituteSessionUsernameHtml(message: IncomingMessage, html: string): Promise<string> {
-    const sessionUsername = await this.getSessionUsernameLabel(message);
+  private substituteSessionUsernameHtml(message: IncomingMessage, html: string): string {
+    const sessionUsername = this.getSessionUsernameLabel(message);
     return html.replaceAll("{{SESSION_USERNAME}}", this.escapeHtml(sessionUsername));
   }
 
-  private async getSessionUsernameLabel(message: IncomingMessage): Promise<string> {
+  private getSessionUsernameLabel(message: IncomingMessage): string {
     const ownerUsername = message.sessionOwnerUsername?.trim();
     if (ownerUsername) {
       return `@${ownerUsername}`;
     }
-
-    if (this.usesBusinessAutomationReply(message)) {
-      return "This account";
-    }
-
-    const client = await this.mtprotoSessions.getClientForBlock(message.sessionId);
-    if (!client) return "This account";
-
-    const cached = this.sessionUsernameByClient.get(client);
-    if (cached) return cached;
-
-    try {
-      const me = await client.getMe();
-      const label =
-        typeof (me as { username?: unknown }).username === "string" && (me as { username?: string }).username
-          ? `@${(me as { username: string }).username}`
-          : "This account";
-      this.sessionUsernameByClient.set(client, label);
-      return label;
-    } catch (error) {
-      this.logger.warn("template_username_fallback", { error: String(error) });
-      const fallback = "This account";
-      this.sessionUsernameByClient.set(client, fallback);
-      return fallback;
-    }
+    return "This account";
   }
 
   private escapeHtml(input: string): string {

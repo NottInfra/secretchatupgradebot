@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { Api } from "telegram";
 import { ExecuteModerationActionUseCase } from "./execute-moderation-action.js";
 import { mockLogger, sampleMessage } from "../test/support/mocks.js";
 
@@ -8,7 +7,7 @@ describe("ExecuteModerationActionUseCase", () => {
     const notifications = { sendBusinessHTMLReply: vi.fn() };
     const useCase = new ExecuteModerationActionUseCase(notifications as never, mockLogger() as never);
 
-    await useCase.execute({} as never, {
+    await useCase.execute({ invoke: vi.fn() } as never, {
       senderId: "1",
       decision: { action: "allow", confidence: 1, reason: "noop" }
     });
@@ -16,16 +15,18 @@ describe("ExecuteModerationActionUseCase", () => {
     expect(notifications.sendBusinessHTMLReply).not.toHaveBeenCalled();
   });
 
-  it("sends a business automation block message", async () => {
+  it("sends a business automation block message and blocks via tdlib", async () => {
     const notifications = { sendBusinessHTMLReply: vi.fn(async () => true) };
     const client = {
-      getInputEntity: vi.fn(async () => ({})),
-      invoke: vi.fn(async () => undefined)
+      invoke: vi.fn(async (query: { _: string }) => {
+        if (query._ === "getMe") return { id: 999 };
+        return undefined;
+      })
     };
     const useCase = new ExecuteModerationActionUseCase(notifications as never, mockLogger() as never);
 
     await useCase.execute(client as never, {
-      senderId: "sender-1",
+      senderId: "1",
       decision: { action: "block", confidence: 1, reason: "test" },
       blockMessageHtml: "<b>Blocked</b>",
       moderationIncoming: sampleMessage({
@@ -35,26 +36,34 @@ describe("ExecuteModerationActionUseCase", () => {
     });
 
     expect(notifications.sendBusinessHTMLReply).toHaveBeenCalledOnce();
-    expect(client.invoke).toHaveBeenCalledOnce();
+    expect(client.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({ _: "blockMessageSender" })
+    );
   });
 
   it("skips contact block for self peer", async () => {
     const notifications = { sendBusinessHTMLReply: vi.fn(async () => true) };
     const client = {
-      getInputEntity: vi.fn(async () => new Api.InputPeerSelf()),
-      sendMessage: vi.fn(async () => ({ id: 1 })),
-      invoke: vi.fn(async () => undefined)
+      invoke: vi.fn(async (query: { _: string }) => {
+        if (query._ === "getMe") return { id: 1 };
+        return undefined;
+      })
     };
     const useCase = new ExecuteModerationActionUseCase(notifications as never, mockLogger() as never);
 
     await useCase.execute(client as never, {
-      senderId: "sender-1",
+      senderId: "1",
       decision: { action: "block", confidence: 1, reason: "test" },
       blockMessageHtml: "<b>Blocked</b>",
-      moderationIncoming: sampleMessage()
+      moderationIncoming: sampleMessage({
+        source: "bot_api_automation",
+        businessConnectionId: "bc-1"
+      })
     });
 
-    expect(client.sendMessage).toHaveBeenCalledOnce();
-    expect(client.invoke).not.toHaveBeenCalled();
+    expect(notifications.sendBusinessHTMLReply).toHaveBeenCalledOnce();
+    expect(client.invoke).not.toHaveBeenCalledWith(
+      expect.objectContaining({ _: "blockMessageSender" })
+    );
   });
 });

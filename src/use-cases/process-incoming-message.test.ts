@@ -57,7 +57,7 @@ function buildUseCase(overrides: {
     logger as never,
     notifications as never,
     experiments,
-    { getClientForBlock: vi.fn(async () => overrides.client ?? null) } as never,
+    { getTdlibForOwner: vi.fn(async () => overrides.client ?? null), executeBlockWithSession: vi.fn(async () => Boolean(overrides.client)) } as never,
     priorBlockOwnerPrompt
   );
 

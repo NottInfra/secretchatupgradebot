@@ -1,5 +1,3 @@
-import type { TelegramClient } from "telegram";
-
 export type ModerationAction = "allow" | "ignore" | "block";
 
 export interface ModerationDecision {
@@ -8,13 +6,7 @@ export interface ModerationDecision {
   reason: string;
 }
 
-export type ModerationInboundSource = "mtproto" | "bot_api_automation";
-
-/** Argument GramJS accepts for `getInputEntity` / send targets */
-export type MtprotoEntityLike = Parameters<TelegramClient["getInputEntity"]>[0];
-
-/** Narrow TL peer reference — optional so Bot API path stays plain ids */
-export type MtprotoPeerLike = import("telegram").Api.TypePeer;
+export type ModerationInboundSource = "bot_api_automation";
 
 export interface IncomingMessage {
   sessionId: string;
@@ -31,14 +23,6 @@ export interface IncomingMessage {
   source?: ModerationInboundSource;
   /** Present on Bot API business_message updates; replies should go through the management bot. */
   businessConnectionId?: string;
-  /**
-   * From CustomMessage.getInputChat(): dialog-backed InputPeer (access hash). Strongest resolution.
-   */
-  mtprotoReplyEntity?: MtprotoEntityLike;
-  /**
-   * Original MTProto `peerId` for this chat; fallback when entity cache is cold.
-   */
-  mtprotoPeer?: MtprotoPeerLike;
 }
 
 export type SessionRecord = {

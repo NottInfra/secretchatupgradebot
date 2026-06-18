@@ -2,9 +2,7 @@ import { initEnv } from "./utils/env.js";
 import { Store } from "./utils/db/root.js";
 import process from "node:process";
 import { ActionQueueService } from "./bg-services/action-queue-service.js";
-import { AuthHttpService } from "./bg-services/auth-http-service.js";
 import { MgmtBotService } from "./bg-services/mgmt-bot-service.js";
-import { MtprotoSessionService } from "./bg-services/mtproto-session-service.js";
 import { BotController } from "./controllers/bot-controller.js";
 import { ChatAutomationController } from "./controllers/chat-automation-controller.js";
 import { HandleUserMiddleware } from "./middleware/handle-user-middleware.js";
@@ -13,12 +11,12 @@ import { ActionLogRepository } from "./repositories/action-log-repository.js";
 import { MessageRepository } from "./repositories/message-repository.js";
 import { SessionRepository } from "./repositories/session-repository.js";
 import path from "node:path";
-import { AuthChallengeService } from "./services/auth-challenge-service.js";
 import { ClientNotificationService } from "./services/client-notification-service.js";
 import { InboundMessageDedupe } from "./services/inbound-message-dedupe.js";
 import { ExperimentService } from "./services/experiment-service.js";
 import { PendingBlockOfferStore } from "./services/pending-block-offer-store.js";
-import { OnboardingUseCase } from "./use-cases/onboarding.js";
+import { OwnerSessionService } from "./services/session-provider/owner-session-service.js";
+import { BlockOnboardingCoordinator } from "./services/session-provider/block-onboarding-coordinator.js";
 import { BotRoutes } from "./routes/bot.js";
 import { Analytics } from "./utils/analytics.js";
 import { getTracer, initTelemetry, shutdownTelemetry, withSpan } from "./utils/telemetry.js";
@@ -45,7 +43,7 @@ export async function startApp(): Promise<void> {
   const env = await withSpan(appTracer, "app.init_env", async () => initEnv());
   await withSpan(appTracer, "app.init_telemetry", async () => initTelemetry());
 
-  const { botService, authHttpService, mtprotoSessions, logger } = await withSpan(
+  const { botService, ownerSessions, logger } = await withSpan(
     appTracer,
     "app.startup",
     async () => {
@@ -59,7 +57,6 @@ export async function startApp(): Promise<void> {
     const sessions = new SessionRepository(store);
     const sessionModerationToggle = new SessionModerationToggleMiddleware(sessions);
     const actionQueue = new ActionQueueService(logger);
-    const authChallenges = new AuthChallengeService();
     const notifications = new ClientNotificationService(logger);
     const executeModerationAction = new ExecuteModerationActionUseCase(notifications, logger);
     const handlePolicyUseCase = new HandlePolicyUseCase(notifications, analytics, logger);
@@ -74,12 +71,25 @@ export async function startApp(): Promise<void> {
       logger
     );
 
-    const mtprotoSessions = new MtprotoSessionService(
-      sessions,
-      env.TELEGRAM_API_ID,
-      env.TELEGRAM_API_HASH,
-      env.TELEGRAM_USE_WSS,
-      env.TELEGRAM_CONNECT_TIMEOUT_MS,
+    const ownerSessions = OwnerSessionService.create(
+      {
+        userId: env.SESSION_PROVIDER_USER_ID,
+        apiKey: env.SESSION_PROVIDER_API_KEY,
+        url: env.SESSION_PROVIDER_URL,
+        svcName: env.SESSION_PROVIDER_SVC_NAME,
+        sessionProviderRoot: env.SESSION_PROVIDER_ROOT,
+        apiId: env.TELEGRAM_API_ID,
+        apiHash: env.TELEGRAM_API_HASH
+      },
+      notifications,
+      logger
+    );
+    await ownerSessions.start();
+
+    const blockOnboarding = new BlockOnboardingCoordinator(
+      ownerSessions,
+      executeModerationAction,
+      notifications,
       logger
     );
 
@@ -93,8 +103,7 @@ export async function startApp(): Promise<void> {
     const handleOwnerBlockCallback = new HandleOwnerBlockCallbackUseCase(
       pendingBlockOffers,
       actionLogs,
-      executeModerationAction,
-      mtprotoSessions,
+      blockOnboarding,
       experiments,
       notifications,
       analytics,
@@ -111,25 +120,15 @@ export async function startApp(): Promise<void> {
       logger,
       notifications,
       experiments,
-      mtprotoSessions,
+      blockOnboarding,
       priorBlockOwnerPrompt
     );
 
-    const onboarding = new OnboardingUseCase(
-      authChallenges,
-      sessions,
-      notifications,
-      analytics,
-      logger
-    );
-
-    const authHttpService = new AuthHttpService(env.AUTH_HTTP_PORT, authChallenges, logger);
-    const botController = new BotController(onboarding, toggleModerationUseCase, notifications, logger);
+    const botController = new BotController(blockOnboarding, toggleModerationUseCase, notifications, logger);
     const chatAutomationController = new ChatAutomationController(
       useCase,
       sessionModerationToggle,
       sessions,
-      notifications,
       logger
     );
     const botService = new MgmtBotService(
@@ -146,19 +145,17 @@ export async function startApp(): Promise<void> {
       logger
     );
 
-    return { botService, authHttpService, mtprotoSessions, logger };
+    return { botService, ownerSessions, logger };
     }
   );
 
-  await withSpan(appTracer, "app.start_auth_http", async () => authHttpService.start());
   await withSpan(appTracer, "app.start_mgmt_bot", async () => botService.start());
 
   const shutdown = async () => {
     await withSpan(appTracer, "app.shutdown", async () => {
       logger.info("shutdown_requested");
       await botService.stop();
-      await authHttpService.stop();
-      await mtprotoSessions.stop();
+      await ownerSessions.stop();
       await store.close();
       await shutdownTelemetry();
       process.exit(0);

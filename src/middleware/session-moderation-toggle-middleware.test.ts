@@ -18,11 +18,11 @@ describe("SessionModerationToggleMiddleware", () => {
     await expect(middleware.isEnabled("1")).resolves.toBe(false);
   });
 
-  it("defaults to enabled when no session exists", async () => {
+  it("returns false when no session exists", async () => {
     const middleware = new SessionModerationToggleMiddleware({
-      findByUserId: async () => undefined
+      findByUserId: async () => null
     } as never);
 
-    await expect(middleware.isEnabled("1")).resolves.toBe(true);
+    await expect(middleware.isEnabled("1")).resolves.toBe(false);
   });
 });

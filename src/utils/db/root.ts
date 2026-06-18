@@ -82,10 +82,23 @@ export class Store {
           );
           return;
         }
+        case "sessions.ensure_user": {
+          const [userId, now] = args as [string, string];
+          await this.backing.query(
+            `INSERT INTO sessions(user_id, session_string, active, created_at, updated_at)
+             VALUES ($1, '', FALSE, $2::timestamptz, $2::timestamptz)
+             ON CONFLICT(user_id) DO NOTHING`,
+            [userId, now]
+          );
+          return;
+        }
         case "sessions.set_active": {
           const [userId, active, now] = args as [string, boolean, string];
           await this.backing.query(
-            `UPDATE sessions SET active = $2, updated_at = $3::timestamptz WHERE user_id = $1`,
+            `INSERT INTO sessions(user_id, session_string, active, created_at, updated_at)
+             VALUES ($1, '', $2, $3::timestamptz, $3::timestamptz)
+             ON CONFLICT(user_id)
+             DO UPDATE SET active = EXCLUDED.active, updated_at = EXCLUDED.updated_at`,
             [userId, active, now]
           );
           return;
@@ -138,6 +151,15 @@ export class Store {
         sessionString,
         active: true
       });
+    } else if (query === "sessions.ensure_user") {
+      const [userId] = args as [string, string];
+      if (!this.sessionByUserId.has(userId)) {
+        this.putSessionCache({
+          userId,
+          sessionString: "",
+          active: false
+        });
+      }
     } else if (query === "sessions.set_active") {
       const [userId, active] = args as [string, boolean, string];
       const existing = this.sessionByUserId.get(userId);

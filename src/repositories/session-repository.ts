@@ -16,6 +16,10 @@ export class SessionRepository {
     await this.store.write("sessions.upsert_active", userId, sessionString, new Date().toISOString());
   }
 
+  async ensureUser(userId: string): Promise<void> {
+    await this.store.write("sessions.ensure_user", userId, new Date().toISOString());
+  }
+
   async setActive(userId: string, active: boolean): Promise<void> {
     await this.store.write("sessions.set_active", userId, active, new Date().toISOString());
   }

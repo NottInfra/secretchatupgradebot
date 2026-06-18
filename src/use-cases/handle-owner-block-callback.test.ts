@@ -8,8 +8,7 @@ describe("HandleOwnerBlockCallbackUseCase", () => {
     const useCase = new HandleOwnerBlockCallbackUseCase(
       new PendingBlockOfferStore(),
       {} as never,
-      { execute: vi.fn() } as never,
-      {} as never,
+      { executeBlockWithSession: vi.fn() } as never,
       { assignModerationTier: vi.fn() } as never,
       {} as never,
       mockAnalytics() as never,
@@ -23,7 +22,7 @@ describe("HandleOwnerBlockCallbackUseCase", () => {
   it("blocks the sender when the offer is valid", async () => {
     const offers = new PendingBlockOfferStore();
     const token = offers.create(sampleMessage({ sessionId: "42" }), "level3_messages_block", "a");
-    const execute = vi.fn(async () => undefined);
+    const executeBlockWithSession = vi.fn(async () => true);
     const notifications = { sendHTML: vi.fn(async () => true) };
 
     const useCase = new HandleOwnerBlockCallbackUseCase(
@@ -32,8 +31,7 @@ describe("HandleOwnerBlockCallbackUseCase", () => {
         hasPriorBlockInSession: async () => false,
         saveDeferred: vi.fn()
       } as never,
-      { execute } as never,
-      { getClientForBlock: async () => ({}) } as never,
+      { executeBlockWithSession } as never,
       {
         assignModerationTier: () => ({
           experimentId: "level3_messages_block",
@@ -48,7 +46,7 @@ describe("HandleOwnerBlockCallbackUseCase", () => {
 
     const message = await useCase.execute(42, token);
     expect(message).toMatch(/blocked/i);
-    expect(execute).toHaveBeenCalledOnce();
+    expect(executeBlockWithSession).toHaveBeenCalledOnce();
     expect(notifications.sendHTML).toHaveBeenCalledOnce();
   });
 });

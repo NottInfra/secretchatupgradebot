@@ -5,6 +5,6 @@ export class SessionModerationToggleMiddleware {
 
   async isEnabled(sessionId: string): Promise<boolean> {
     const record = await this.sessions.findByUserId(sessionId);
-    return record?.active !== false;
+    return record?.active === true;
   }
 }

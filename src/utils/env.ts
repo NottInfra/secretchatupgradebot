@@ -45,10 +45,11 @@ const schema = z.object({
   PORT: z.coerce.number().default(3000),
   TELEGRAM_API_ID: z.coerce.number().finite().positive(),
   TELEGRAM_API_HASH: z.string().min(1),
-  TELEGRAM_USE_WSS: boolish,
-  TELEGRAM_CONNECT_TIMEOUT_MS: z.coerce.number().default(20000),
-  AUTH_HOST_BASE: z.string().optional(),
-  AUTH_HTTP_PORT: z.coerce.number().default(8787),
+  SESSION_PROVIDER_URL: z.string().default("ws://localhost:3000"),
+  SESSION_PROVIDER_USER_ID: z.string().min(1),
+  SESSION_PROVIDER_API_KEY: z.string().min(1),
+  SESSION_PROVIDER_SVC_NAME: z.string().min(1),
+  SESSION_PROVIDER_ROOT: z.string().optional(),
   MGMT_BOT_TOKEN: z.string().optional()
 });
 

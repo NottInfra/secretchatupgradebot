@@ -3,10 +3,10 @@
 Automated messages to people attempting to chat without secret chat. Instant user blocks for failing to comply.
 
 <b>How it works</b>
-1. Send <b>/start</b> and complete onboarding (phone + login code). This registers your Telegram account and stores the session we need to block senders.
-2. In Telegram → Settings → Business (or Chatbots), connect <b>business automation</b> to this bot so we can read incoming DMs to your inbox and send warnings on your behalf.
+1. In Telegram → Settings → Business (or Chatbots), connect <b>business automation</b> to this bot so we can read incoming DMs to your inbox and send warnings on your behalf.
+2. Send <b>/toggle</b> to turn moderation on.
 
-Without both steps, moderation cannot run on your account.
+When a sender needs to be blocked, we will ask for your phone number once to connect your Telegram session via our session provider — only at block time, not upfront.
 
 <b>/help</b> - bot instructions
 <b>/terms</b> - usage terms

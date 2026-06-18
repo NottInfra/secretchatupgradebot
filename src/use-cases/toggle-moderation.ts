@@ -12,22 +12,22 @@ export class ToggleModerationUseCase {
   ) {}
 
   async execute(userId: number): Promise<void> {
-    const record = await this.sessions.findByUserId(String(userId));
+    const userIdStr = String(userId);
+    let record = await this.sessions.findByUserId(userIdStr);
     if (!record) {
-      await this.notifications.sendToClient(
-        String(userId),
-        "No active onboarding session found. Send /start first."
-      );
-      return;
+      await this.sessions.ensureUser(userIdStr);
+      record = await this.sessions.findByUserId(userIdStr);
     }
 
-    const nextActive = !record.active;
-    await this.sessions.setActive(String(userId), nextActive);
+    const nextActive = !(record?.active ?? false);
+    await this.sessions.setActive(userIdStr, nextActive);
     this.analytics.trackEvent("moderation_toggled", { userId, active: nextActive });
     this.logger.info("moderation_toggled", { userId, active: nextActive });
     await this.notifications.sendToClient(
       String(userId),
-      nextActive ? "Moderation is now ON." : "Moderation is now OFF."
+      nextActive
+        ? "Moderation is now ON. We will warn and block senders via business automation; your Telegram session is only requested when a block is needed."
+        : "Moderation is now OFF."
     );
   }
 }

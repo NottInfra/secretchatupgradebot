@@ -3,28 +3,35 @@ import { ToggleModerationUseCase } from "./toggle-moderation.js";
 import { mockAnalytics, mockLogger } from "../test/support/mocks.js";
 
 describe("ToggleModerationUseCase", () => {
-  it("prompts onboarding when no session exists", async () => {
+  it("creates a moderation row and toggles on", async () => {
+    const ensureUser = vi.fn(async () => undefined);
+    const setActive = vi.fn(async () => undefined);
+    const findByUserId = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ userId: "42", sessionString: "", active: false });
     const notifications = { sendToClient: vi.fn(async () => true) };
     const useCase = new ToggleModerationUseCase(
-      { findByUserId: async () => undefined } as never,
+      { findByUserId, ensureUser, setActive } as never,
       notifications as never,
       mockAnalytics() as never,
       mockLogger() as never
     );
 
     await useCase.execute(42);
-    expect(notifications.sendToClient).toHaveBeenCalledWith(
-      "42",
-      "No active onboarding session found. Send /start first."
-    );
+
+    expect(ensureUser).toHaveBeenCalledWith("42");
+    expect(setActive).toHaveBeenCalledWith("42", true);
+    expect(notifications.sendToClient).toHaveBeenCalledWith("42", expect.stringContaining("ON"));
   });
 
-  it("toggles moderation on and off", async () => {
-    const notifications = { sendToClient: vi.fn(async () => true) };
+  it("toggles moderation off when already on", async () => {
     const setActive = vi.fn(async () => undefined);
+    const notifications = { sendToClient: vi.fn(async () => true) };
     const useCase = new ToggleModerationUseCase(
       {
-        findByUserId: async () => ({ userId: "42", sessionString: "s", active: true }),
+        findByUserId: async () => ({ userId: "42", sessionString: "", active: true }),
+        ensureUser: vi.fn(),
         setActive
       } as never,
       notifications as never,
@@ -33,7 +40,8 @@ describe("ToggleModerationUseCase", () => {
     );
 
     await useCase.execute(42);
+
     expect(setActive).toHaveBeenCalledWith("42", false);
-    expect(notifications.sendToClient).toHaveBeenCalledWith("42", "Moderation is now OFF.");
+    expect(notifications.sendToClient).toHaveBeenCalledWith("42", expect.stringContaining("OFF"));
   });
 });
