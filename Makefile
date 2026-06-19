@@ -8,4 +8,5 @@ run:
 
 test:
 	@npm ci
+	@npm run build:sdk
 	@npm run test:coverage

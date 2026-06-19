@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:sdk": "npm install --prefix sdk && npm run build --prefix sdk",
+    "prebuild": "npm run build:sdk",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/root.js",
     "dev": "NODE_ENV=development tsx watch src/root.ts",

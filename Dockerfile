@@ -10,7 +10,7 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 RUN apk upgrade --no-cache libcrypto3 libssl3
 COPY package.json package-lock.json ./
-COPY sdk ./sdk
+COPY --from=build /app/sdk ./sdk
 RUN npm ci --omit=dev \
   && rm -f package-lock.json \
   && rm -rf /usr/local/lib/node_modules/npm \
