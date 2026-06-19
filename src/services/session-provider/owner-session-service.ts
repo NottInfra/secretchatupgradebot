@@ -107,7 +107,7 @@ export class OwnerSessionService {
         return undefined;
       }
       const onboarded = await this.onboardOwner(ownerId, phone.trim());
-      if (!onboarded || onboarded.step !== "complete") return undefined;
+      if (onboarded?.step !== "complete") return undefined;
       accountId = onboarded.accountId;
     }
 

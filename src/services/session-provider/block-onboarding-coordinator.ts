@@ -52,7 +52,7 @@ export class BlockOnboardingCoordinator {
 
   async onPhoneSubmitted(ownerUserId: string, phone: string): Promise<void> {
     const state = this.pending.get(ownerUserId);
-    if (!state || state.stage !== "awaiting_phone") return;
+    if (state?.stage !== "awaiting_phone") return;
 
     const blocks = [...state.blocks];
     this.pending.delete(ownerUserId);

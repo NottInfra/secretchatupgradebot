@@ -28,4 +28,37 @@ describe("BotController", () => {
     await controller.handleStart(9);
     expect(notifications.sendToClient).toHaveBeenCalledWith("9", "command failed");
   });
+
+  it("forwards phone text during block onboarding", async () => {
+    const blockOnboarding = {
+      isAwaitingPhone: vi.fn(() => true),
+      onPhoneSubmitted: vi.fn(async () => undefined)
+    };
+    const notifications = { sendToClient: vi.fn(async () => true) };
+    const controller = new BotController(
+      blockOnboarding as never,
+      {} as never,
+      notifications as never,
+      mockLogger() as never
+    );
+
+    await controller.handleText(9, "  +447700900123 ");
+    expect(blockOnboarding.onPhoneSubmitted).toHaveBeenCalledWith("9", "+447700900123");
+  });
+
+  it("ignores text when phone onboarding is not active", async () => {
+    const blockOnboarding = {
+      isAwaitingPhone: vi.fn(() => false),
+      onPhoneSubmitted: vi.fn()
+    };
+    const controller = new BotController(
+      blockOnboarding as never,
+      {} as never,
+      { sendToClient: vi.fn() } as never,
+      mockLogger() as never
+    );
+
+    await controller.handleText(9, "+447700900123");
+    expect(blockOnboarding.onPhoneSubmitted).not.toHaveBeenCalled();
+  });
 });
