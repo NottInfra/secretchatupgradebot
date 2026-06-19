@@ -1,4 +1,4 @@
-# Live deploy compose — CI exports IMAGE, CONTAINER_NAME, ports from docs/project.yml.
+# Live deploy compose — CI exports IMAGE, CONTAINER_NAME from docs/project.yml.
 # App secrets: initEnv() reads Vault (VAULT_ADDR + VAULT_READ_TOKEN from CI job env).
 # DNS: use Docker embedded resolver on mono (127.0.0.11) — do not set dns: adguard (host daemon needs IPs).
 
@@ -13,8 +13,6 @@ services:
       TELEGRAM_SOCKS_PROXY: socks5h://whonix-socks-front:9050
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_SERVICE_NAME: secretchatonly-bot
-    ports:
-      - "${HOST_PORT}:${CONTAINER_PORT}"
     networks:
       - mono
     restart: unless-stopped

@@ -36,11 +36,5 @@ env:
 staging:
   live:
     registry_tag: prod
-    ports:
-      host: 8787
-      container: 8787
   test:
     registry_tag: test
-    ports:
-      host: 8788
-      container: 8787

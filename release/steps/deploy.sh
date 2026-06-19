@@ -5,7 +5,7 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh" "${1:?staging required}"
 branch_gate
 
-export IMAGE CONTAINER_NAME HOST_PORT CONTAINER_PORT VAULT_READ_TOKEN
+export IMAGE CONTAINER_NAME VAULT_READ_TOKEN
 
 COMPOSE_FILE="$RELEASE_FILE"
 COMPOSE_PROJECT="$CONTAINER_NAME"
@@ -18,8 +18,6 @@ if [[ "$LEGACY_PROJECT" != "$COMPOSE_PROJECT" ]]; then
   docker compose -p "$LEGACY_PROJECT" -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
 fi
 
-docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
-
 if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
   managed_id="$(docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" ps -q 2>/dev/null | head -1 || true)"
   existing_id="$(docker container inspect -f '{{.Id}}' "$CONTAINER_NAME")"
@@ -27,15 +25,6 @@ if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
     docker rm -f "$CONTAINER_NAME"
   fi
 fi
-
-# Failed recreate can leave the named container bound to the host port.
-while read -r holder_id; do
-  [[ -n "$holder_id" ]] || continue
-  holder_name="$(docker inspect -f '{{.Name}}' "$holder_id" | sed 's#^/##')"
-  if [[ "$holder_name" == "$CONTAINER_NAME" ]]; then
-    docker rm -f "$holder_id"
-  fi
-done < <(docker ps -aq --filter "publish=${HOST_PORT}" 2>/dev/null || true)
 
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --force-recreate --remove-orphans
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" ps
