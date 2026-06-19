@@ -13,9 +13,6 @@ default:
   before_script:
     - apk add --no-cache bash
 
-.build_before_script: &build_before_script
-  - apk add --no-cache bash nodejs npm curl jq
-
 .build_rules: &build_rules
   rules:
     - if: $CI_COMMIT_BRANCH == "develop"
@@ -26,14 +23,8 @@ build:
   stage: build
   tags: [self-hosted, test]
   <<: *build_rules
-  variables:
-    GITLAB_INTERNAL_URL: http://gitlab
-  before_script:
-    - *build_before_script
   script:
     - bash ./release/steps/build.sh test
-  after_script:
-    - bash ./release/steps/npm-registry-cleanup.sh || true
 
 trivy:
   stage: scan
@@ -49,15 +40,10 @@ unit-test:
   tags: [self-hosted, test]
   needs: [build]
   <<: *build_rules
-  variables:
-    GITLAB_INTERNAL_URL: http://gitlab
   before_script:
-    - apk add --no-cache bash make curl jq nodejs npm
-    - bash ./release/steps/npm-registry.sh test
+    - apk add --no-cache bash make
   script:
     - bash ./release/steps/unit-test.sh test
-  after_script:
-    - bash ./release/steps/npm-registry-cleanup.sh || true
   artifacts:
     paths:
       - coverage/

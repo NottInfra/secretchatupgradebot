@@ -33,12 +33,6 @@ env:
   live: .env.production
   test: .env.test
 
-# Deploy wiring only — not app secrets
-packages:
-  sessionprovider:
-    scope: sessionprovider
-    project_path: nottinfra-limited/session-provider
-
 staging:
   live:
     registry_tag: prod

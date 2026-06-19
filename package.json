@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@aws-sdk/rds-signer": "^3.917.0",
-    "@sessionprovider/sdk": "^0.1.0",
+    "@sessionprovider/sdk": "file:./sdk",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "pg": "^8.16.3",

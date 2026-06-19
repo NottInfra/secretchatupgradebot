@@ -220,6 +220,8 @@ sync_gitlab_ci_secrets() {
 
   gitlab_ci_upsert_variable "$api" "$gitlab_token" VAULT_READ_TOKEN "$vault_read_token"
   echo "[+] GitLab ${CI_PATH}: variable VAULT_READ_TOKEN"
+  gitlab_ci_upsert_variable "$api" "$gitlab_token" GITLAB_TOKEN "$gitlab_token"
+  echo "[+] GitLab ${CI_PATH}: variable GITLAB_TOKEN (masked)"
   sonar="$(ci_sonar_token_resolve "$env_file" "$vault_path" 2>/dev/null || true)"
   if [[ -n "$sonar" ]]; then
     gitlab_ci_upsert_variable "$api" "$gitlab_token" SONAR_TOKEN "$sonar"

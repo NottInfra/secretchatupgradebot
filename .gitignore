@@ -15,4 +15,3 @@ release/.compose.generated.yml
 coverage/
 .trivy-cache/
 .npmrc
-package-lock.json.npm-registry-bak

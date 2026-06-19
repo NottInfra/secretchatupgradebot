@@ -1,7 +1,0 @@
-# Copy to .npmrc for local npm ci (do not commit .npmrc — it contains a token).
-# Requires GITLAB_TOKEN with read_api + read_package_registry (see .env.test).
-#
-#   bash release/steps/npm-registry.sh test
-#
-# @sessionprovider:registry=https://gitlab.nottinfra.co.uk/api/v4/projects/<project_id>/packages/npm/
-# //gitlab.nottinfra.co.uk/api/v4/projects/<project_id>/packages/npm/:_authToken=${GITLAB_TOKEN}
