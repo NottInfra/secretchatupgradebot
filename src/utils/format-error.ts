@@ -6,7 +6,7 @@ export function formatError(error: unknown): string {
   }
   if (error instanceof Error) {
     const cause =
-      error.cause !== undefined ? ` cause=${formatError(error.cause)}` : "";
+      error.cause === undefined ? "" : ` cause=${formatError(error.cause)}`;
     return `${error.message}${cause}`;
   }
   return String(error);

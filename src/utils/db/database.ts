@@ -1,6 +1,4 @@
-import { Pool } from "pg";
-import type { PoolConfig } from "pg";
-import type { QueryResultRow } from "pg";
+import { Pool, type PoolConfig, type QueryResultRow } from "pg";
 import { Signer } from "@aws-sdk/rds-signer";
 import { env } from "../env.js";
 
