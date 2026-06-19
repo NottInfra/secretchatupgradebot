@@ -58,7 +58,16 @@ describe("Database", () => {
     new Database();
     const config = poolConfigs[0] as { connectionString: string; ssl?: object };
     expect(config.connectionString).toContain("sslmode=require");
-    expect(config.ssl).toBeUndefined();
+    expect(config.ssl).toEqual({ rejectUnauthorized: false });
+  });
+
+  it("honors sslmode=disable even when DATABASE_SSL is true", () => {
+    envState.DATABASE_URL = "postgresql://mono:pass@postgres:5432/app?sslmode=disable";
+    envState.DATABASE_SSL = true;
+    new Database();
+    const config = poolConfigs[0] as { connectionString: string; ssl?: object | false };
+    expect(config.connectionString).toContain("sslmode=disable");
+    expect(config.ssl).toBe(false);
   });
 
   it("falls back to the raw connection string when the URL is invalid", () => {

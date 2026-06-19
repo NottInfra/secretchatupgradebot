@@ -4,21 +4,36 @@ import { env } from "../env.js";
 
 /** node-pg pool `ssl` option — channel_binding in the URL often breaks Neon connects. */
 function poolConfigFromDatabaseUrl(raw: string): Pick<PoolConfig, "connectionString" | "ssl"> {
+  const fallbackSsl: PoolConfig["ssl"] = env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined;
   try {
     const url = new URL(raw);
     url.searchParams.delete("channel_binding");
-    if (env.DATABASE_SSL) {
-      url.searchParams.delete("sslmode");
+    const sslMode = url.searchParams.get("sslmode")?.trim().toLowerCase() ?? null;
+
+    // Explicit disable in the URL wins over DATABASE_SSL (e.g. mono postgres on docker network).
+    if (sslMode === "disable") {
+      return { connectionString: url.toString(), ssl: false };
     }
-    return {
-      connectionString: url.toString(),
-      ssl: env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined
-    };
+
+    const urlRequestsSsl =
+      sslMode === "require" ||
+      sslMode === "verify-full" ||
+      sslMode === "verify-ca" ||
+      sslMode === "prefer";
+
+    if (env.DATABASE_SSL || urlRequestsSsl) {
+      if (env.DATABASE_SSL) {
+        url.searchParams.delete("sslmode");
+      }
+      return {
+        connectionString: url.toString(),
+        ssl: { rejectUnauthorized: false }
+      };
+    }
+
+    return { connectionString: url.toString(), ssl: undefined };
   } catch {
-    return {
-      connectionString: raw,
-      ssl: env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined
-    };
+    return { connectionString: raw, ssl: fallbackSsl };
   }
 }
 
