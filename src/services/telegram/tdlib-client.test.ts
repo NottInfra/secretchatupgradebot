@@ -8,7 +8,7 @@ const tdlMocks = vi.hoisted(() => ({
 }));
 
 const fsMocks = vi.hoisted(() => ({
-  existsSync: vi.fn(() => true),
+  existsSync: vi.fn((_path: string) => true),
   mkdirSync: vi.fn()
 }));
 
