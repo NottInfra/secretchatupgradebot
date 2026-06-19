@@ -1,6 +1,7 @@
 import { context, ROOT_CONTEXT } from "@opentelemetry/api";
 import { Telegraf } from "telegraf";
 import { ClientNotificationService } from "../services/client-notification-service.js";
+import { formatError } from "../utils/format-error.js";
 import type { Logger } from "../utils/logger.js";
 
 /** Telegram Business updates — typegram typings may lag Bot API. */
@@ -31,6 +32,12 @@ export class MgmtBotService {
     }
     const bot = new Telegraf(this.token);
     this.bindRoutes(bot);
+    bot.catch((error, ctx) => {
+      this.logger.error("mgmt_bot_update_failed", {
+        error: formatError(error),
+        updateId: ctx.update.update_id
+      });
+    });
     // Attach early so notification sends work during startup too.
     this.notifications.attachBot(bot);
     this.bot = bot;
@@ -48,12 +55,12 @@ export class MgmtBotService {
           })
           .catch((error: unknown) => {
             this.bot = undefined;
-            this.logger.error("mgmt_bot_launch_failed", { error: String(error) });
+            this.logger.error("mgmt_bot_launch_failed", { error: formatError(error) });
           });
       });
     } catch (error) {
       this.bot = undefined;
-      this.logger.error("mgmt_bot_launch_failed", { error: String(error) });
+      this.logger.error("mgmt_bot_launch_failed", { error: formatError(error) });
     }
   }
 

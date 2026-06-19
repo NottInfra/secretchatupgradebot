@@ -3,6 +3,7 @@ import type { SessionRepository } from "../repositories/session-repository.js";
 import type { SessionModerationToggleMiddleware } from "../middleware/session-moderation-toggle-middleware.js";
 import type { ProcessIncomingMessageUseCase } from "../use-cases/process-incoming-message.js";
 import type { Logger } from "../utils/logger.js";
+import { formatError } from "../utils/format-error.js";
 import { getTracer, setSpanAttributes, withRootSpan, withSpan } from "../utils/telemetry.js";
 
 const chatAutomationTracer = getTracer("chat_automation");
@@ -94,19 +95,38 @@ export class ChatAutomationController {
         } catch (error) {
           this.logger.error("chat_automation_get_connection_failed", {
             businessConnectionId: bcId,
-            error: String(error)
+            error: formatError(error)
           });
           return true;
         }
 
-        await withSpan(chatAutomationTracer, "chat_automation.ensure_moderation_row", async () => {
-          const record = await this.sessions.findByUserId(ownerUserId);
-          if (!record) {
-            await this.sessions.ensureUser(ownerUserId);
-          }
-        });
+        try {
+          await withSpan(chatAutomationTracer, "chat_automation.ensure_moderation_row", async () => {
+            const record = await this.sessions.findByUserId(ownerUserId);
+            if (!record) {
+              await this.sessions.ensureUser(ownerUserId);
+            }
+          });
+        } catch (error) {
+          this.logger.error("chat_automation_session_db_failed", {
+            businessConnectionId: bcId,
+            ownerUserId,
+            error: formatError(error)
+          });
+          return true;
+        }
 
-        const enabled = await this.sessionModeration.isEnabled(ownerUserId);
+        let enabled: boolean;
+        try {
+          enabled = await this.sessionModeration.isEnabled(ownerUserId);
+        } catch (error) {
+          this.logger.error("chat_automation_session_db_failed", {
+            businessConnectionId: bcId,
+            ownerUserId,
+            error: formatError(error)
+          });
+          return true;
+        }
         if (!enabled) {
           this.logger.info("chat_automation_skipped_moderation_off", {
             ownerUserId,
@@ -164,7 +184,10 @@ export class ChatAutomationController {
             source: "bot_api_automation"
           });
         } catch (error) {
-          this.logger.error("chat_automation_process_failed", { ownerUserId, error: String(error) });
+          this.logger.error("chat_automation_process_failed", {
+            ownerUserId,
+            error: formatError(error)
+          });
         }
         return true;
       }

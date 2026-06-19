@@ -1,7 +1,28 @@
 import { Pool } from "pg";
+import type { PoolConfig } from "pg";
 import type { QueryResultRow } from "pg";
 import { Signer } from "@aws-sdk/rds-signer";
 import { env } from "../env.js";
+
+/** node-pg pool `ssl` option — channel_binding in the URL often breaks Neon connects. */
+function poolConfigFromDatabaseUrl(raw: string): Pick<PoolConfig, "connectionString" | "ssl"> {
+  try {
+    const url = new URL(raw);
+    url.searchParams.delete("channel_binding");
+    if (env.DATABASE_SSL) {
+      url.searchParams.delete("sslmode");
+    }
+    return {
+      connectionString: url.toString(),
+      ssl: env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined
+    };
+  } catch {
+    return {
+      connectionString: raw,
+      ssl: env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined
+    };
+  }
+}
 
 export class Database {
   readonly pool: Pool;
@@ -41,10 +62,7 @@ export class Database {
       return;
     }
 
-    this.pool = new Pool({
-      connectionString: env.DATABASE_URL,
-      ssl: env.DATABASE_SSL ? { rejectUnauthorized: false } : undefined
-    });
+    this.pool = new Pool(poolConfigFromDatabaseUrl(env.DATABASE_URL));
   }
 
   private inferRegionFromHost(host: string): string | null {
