@@ -11,6 +11,8 @@ export type TdlibClient = ReturnType<typeof tdl.createClient>;
 type CreateTdlibClientParams = {
   sessionPath: string;
   sessionProviderRoot?: string;
+  /** When set (e.g. after materializing sessionprovider files), used instead of deriving dirs from sessionPath. */
+  sessionDirs?: { databaseDirectory: string; filesDirectory: string };
   apiId: number;
   apiHash: string;
   logger: Logger;
@@ -78,10 +80,9 @@ function sessionDirsFor(sessionPath: string, sessionProviderRoot?: string): { da
 
 export function createTdlibClient(params: CreateTdlibClientParams): TdlibClient {
   configureTdlib();
-  const { databaseDirectory, filesDirectory } = sessionDirsFor(
-    params.sessionPath,
-    params.sessionProviderRoot
-  );
+  const { databaseDirectory, filesDirectory } =
+    params.sessionDirs ??
+    sessionDirsFor(params.sessionPath, params.sessionProviderRoot);
   const client = tdl.createClient({
     apiId: params.apiId,
     apiHash: params.apiHash,

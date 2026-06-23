@@ -9,6 +9,7 @@ import {
 import { messageFromOwnerNotification } from "./owner-notification.js";
 import type { ClientNotificationService } from "../client-notification-service.js";
 import { createTdlibClient, type TdlibClient } from "../telegram/tdlib-client.js";
+import { materializeSessionFiles } from "../telegram/session-files.js";
 import type { Logger } from "../../utils/logger.js";
 
 const ONBOARDING_POLL_MS = 2000;
@@ -95,7 +96,18 @@ export class OwnerSessionService {
     let accountId: string | undefined;
     try {
       const account = await service.lookup(telegramId);
-      accountId = account.id;
+      const resolvedId = account.id?.trim();
+      if (!resolvedId) {
+        if (!phone?.trim()) {
+          this.logger.info("owner_session_needs_phone", { ownerTelegramId });
+          return undefined;
+        }
+        const onboarded = await this.onboardOwner(ownerId, phone.trim());
+        if (onboarded?.step !== "complete") return undefined;
+        accountId = onboarded.accountId;
+      } else {
+        accountId = resolvedId;
+      }
     } catch (error) {
       const message = String(error);
       if (!message.includes("account_not_found") && !message.includes("not_found")) {
@@ -248,9 +260,19 @@ export class OwnerSessionService {
   }
 
   private async openTdlib(session: Session): Promise<TdlibClient | undefined> {
+    let sessionDirs: { databaseDirectory: string; filesDirectory: string } | undefined;
+    if (session.files && Object.keys(session.files).length > 0) {
+      sessionDirs = materializeSessionFiles(session, this.config.sessionProviderRoot);
+      this.logger.info("tdlib_session_files_materialized", {
+        accountId: session.accountId,
+        fileCount: Object.keys(session.files).length
+      });
+    }
+
     const client = createTdlibClient({
       sessionPath: session.sessionPath,
       sessionProviderRoot: this.config.sessionProviderRoot,
+      sessionDirs,
       apiId: this.config.apiId,
       apiHash: this.config.apiHash,
       logger: this.logger

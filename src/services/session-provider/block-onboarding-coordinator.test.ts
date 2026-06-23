@@ -14,7 +14,10 @@ function buildCoordinator(overrides: {
   execute?: ReturnType<typeof vi.fn>;
 } = {}) {
   const logger = mockLogger();
-  const notifications = { sendToClient: vi.fn(async () => undefined) };
+  const notifications = {
+    sendToClient: vi.fn(async () => undefined),
+    sendHTML: vi.fn(async () => undefined)
+  };
   const ownerSessions = {
     getTdlibForOwner: vi.fn(async () => overrides.client ?? null)
   };
@@ -37,7 +40,7 @@ describe("BlockOnboardingCoordinator", () => {
 
     await coordinator.requestPhoneForBlock("owner-1", block, "@sender");
     expect(coordinator.isAwaitingPhone("owner-1")).toBe(true);
-    expect(notifications.sendToClient).toHaveBeenCalledOnce();
+    expect(notifications.sendHTML).toHaveBeenCalledOnce();
   });
 
   it("queues additional blocks while phone is pending", async () => {
@@ -45,7 +48,7 @@ describe("BlockOnboardingCoordinator", () => {
     await coordinator.requestPhoneForBlock("owner-1", block, "@sender");
     await coordinator.requestPhoneForBlock("owner-1", { ...block, senderId: "sender-2" }, "@sender2");
 
-    expect(notifications.sendToClient).toHaveBeenCalledOnce();
+    expect(notifications.sendHTML).toHaveBeenCalledOnce();
     await coordinator.onPhoneSubmitted("owner-1", "+447700900123");
     expect(coordinator.isAwaitingPhone("owner-1")).toBe(false);
   });
@@ -98,7 +101,7 @@ describe("BlockOnboardingCoordinator", () => {
 
     expect(executed).toBe(false);
     expect(coordinator.isAwaitingPhone("owner-1")).toBe(true);
-    expect(notifications.sendToClient).toHaveBeenCalledWith(
+    expect(notifications.sendHTML).toHaveBeenCalledWith(
       "owner-1",
       expect.stringContaining("Send your phone number")
     );

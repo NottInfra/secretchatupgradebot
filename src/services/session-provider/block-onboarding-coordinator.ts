@@ -42,7 +42,7 @@ export class BlockOnboardingCoordinator {
     }
 
     this.pending.set(ownerUserId, { stage: "awaiting_phone", blocks: [block] });
-    await this.notifications.sendToClient(
+    await this.notifications.sendHTML(
       ownerUserId,
       `To block ${senderRef} we need your Telegram session.\n\n` +
         "Send your phone number in international format (example: +447700900123)."

@@ -83,6 +83,37 @@ describe("OwnerSessionService", () => {
     expect(tdlibClient.login).toHaveBeenCalledOnce();
   });
 
+  it("needs phone when lookup returns an empty account shell", async () => {
+    const { ownerSessions, logger } = buildService({
+      lookup: vi.fn(async () => ({ id: "", username: "", sessions: [] }))
+    });
+    const session = await ownerSessions.ensureOwnerSession("6412617720");
+    expect(session).toBeUndefined();
+    expect(logger.info).toHaveBeenCalledWith("owner_session_needs_phone", {
+      ownerTelegramId: "6412617720"
+    });
+  });
+
+  it("onboards when lookup returns empty shell and phone is provided", async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === "onboard.start") {
+        return { step: "complete", accountId: "acc-new", sessionId: "acc-new" };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+    const { ownerSessions, provider } = buildService({
+      lookup: vi.fn(async () => ({ id: "", username: "", sessions: [] })),
+      request
+    });
+
+    const client = await ownerSessions.getTdlibForOwner("6412617720", "+447561231794");
+    expect(client).toBe(tdlibClient);
+    expect(provider.request).toHaveBeenCalledWith(
+      "onboard.start",
+      expect.objectContaining({ phone: "+447561231794", notifyTarget: "6412617720" })
+    );
+  });
+
   it("needs phone when account is missing", async () => {
     const { ownerSessions, logger } = buildService({
       lookup: vi.fn(async () => {
