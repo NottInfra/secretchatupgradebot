@@ -93,39 +93,48 @@ export class OwnerSessionService {
       return undefined;
     }
 
-    let accountId: string | undefined;
-    try {
-      const account = await service.lookup(telegramId);
-      const resolvedId = account.id?.trim();
-      if (!resolvedId) {
-        if (!phone?.trim()) {
-          this.logger.info("owner_session_needs_phone", { ownerTelegramId });
-          return undefined;
-        }
-        const onboarded = await this.onboardOwner(ownerId, phone.trim());
-        if (onboarded?.step !== "complete") return undefined;
-        accountId = onboarded.accountId;
-      } else {
-        accountId = resolvedId;
-      }
-    } catch (error) {
-      const message = String(error);
-      if (!message.includes("account_not_found") && !message.includes("not_found")) {
-        this.logger.error("owner_session_lookup_failed", { ownerTelegramId, error: message });
-        return undefined;
-      }
-      if (!phone?.trim()) {
-        this.logger.info("owner_session_needs_phone", { ownerTelegramId });
-        return undefined;
-      }
-      const onboarded = await this.onboardOwner(ownerId, phone.trim());
-      if (onboarded?.step !== "complete") return undefined;
-      accountId = onboarded.accountId;
-    }
-
+    const accountId = await this.resolveAccountId(service, ownerTelegramId, ownerId, telegramId, phone);
     if (!accountId) return undefined;
 
     return this.grantSession(service, accountId, ownerId);
+  }
+
+  private async resolveAccountId(
+    service: Service,
+    ownerTelegramId: string,
+    ownerId: string,
+    telegramId: number,
+    phone?: string
+  ): Promise<string | undefined> {
+    const phoneTrimmed = phone?.trim();
+
+    try {
+      const account = await service.lookup(telegramId);
+      const resolvedId = account.id?.trim();
+      if (resolvedId) return resolvedId;
+      return this.onboardAccountId(ownerId, phoneTrimmed, ownerTelegramId);
+    } catch (error) {
+      const message = String(error);
+      if (message.includes("account_not_found") || message.includes("not_found")) {
+        return this.onboardAccountId(ownerId, phoneTrimmed, ownerTelegramId);
+      }
+      this.logger.error("owner_session_lookup_failed", { ownerTelegramId, error: message });
+      return undefined;
+    }
+  }
+
+  private async onboardAccountId(
+    ownerId: string,
+    phone: string | undefined,
+    ownerTelegramId: string
+  ): Promise<string | undefined> {
+    if (phone === undefined || phone.length === 0) {
+      this.logger.info("owner_session_needs_phone", { ownerTelegramId });
+      return undefined;
+    }
+    const onboarded = await this.onboardOwner(ownerId, phone);
+    if (onboarded?.step !== "complete") return undefined;
+    return onboarded.accountId;
   }
 
   private async grantSession(service: Service, accountId: string, ownerTelegramId: string): Promise<Session | undefined> {
