@@ -133,12 +133,13 @@ export class ProcessIncomingMessageUseCase {
       message.sessionId
     );
 
-    const instanceCount = await withSpan(moderationTracer, "moderation.load_history", async () =>
-      this.messages.countInstancesBySender(
-        message.senderId,
-        message.sessionId,
-        this.messageInstanceCollapseSeconds
-      )
+    const messageCount = await withSpan(moderationTracer, "moderation.load_history", async () =>
+      this.messages.countBySender(message.senderId, message.sessionId)
+    );
+    const instanceCount = await this.messages.countInstancesBySender(
+      message.senderId,
+      message.sessionId,
+      this.messageInstanceCollapseSeconds
     );
 
     const tier = moderationTierForCount(instanceCount);
@@ -146,6 +147,7 @@ export class ProcessIncomingMessageUseCase {
     this.logger.info("moderation_tier_selected", {
       senderId: message.senderId,
       sessionId: message.sessionId,
+      messageCount,
       instanceCount,
       collapseWindowSeconds: this.messageInstanceCollapseSeconds,
       tier,
@@ -180,7 +182,7 @@ export class ProcessIncomingMessageUseCase {
       await this.handleWarningTier(
         message,
         incomingMessageId,
-        instanceCount,
+        messageCount,
         decision,
         tierAssignment,
         priorBlockOtherAccount
@@ -188,7 +190,7 @@ export class ProcessIncomingMessageUseCase {
       return;
     }
 
-    await this.queueBlockAction(message, incomingMessageId, instanceCount, decision, tierAssignment);
+    await this.queueBlockAction(message, incomingMessageId, messageCount, decision, tierAssignment);
   }
 
   private assignTierExperiment(tier: ModerationTier, senderId: string) {
@@ -201,12 +203,12 @@ export class ProcessIncomingMessageUseCase {
   private async handleWarningTier(
     message: IncomingMessage,
     incomingMessageId: number,
-    instanceCount: number,
+    messageCount: number,
     decision: ModerationDecision,
     tierAssignment: Assignment,
     priorBlockOtherAccount: boolean
   ): Promise<void> {
-    const replyHtml = await this.buildReplyHtml(message, tierAssignment, instanceCount);
+    const replyHtml = await this.buildReplyHtml(message, tierAssignment, messageCount);
     await withSpan(moderationTracer, "moderation.send_reply", async () =>
       this.sendFirstMessageReply(message, replyHtml, tierAssignment.mediaPath)
     );
@@ -242,7 +244,7 @@ export class ProcessIncomingMessageUseCase {
   private async queueBlockAction(
     message: IncomingMessage,
     incomingMessageId: number,
-    instanceCount: number,
+    messageCount: number,
     decision: ModerationDecision,
     tierAssignment: Assignment
   ): Promise<void> {
@@ -259,7 +261,7 @@ export class ProcessIncomingMessageUseCase {
           experiment: tierAssignment.experimentId,
           variant: tierAssignment.variantId
         });
-        const blockMessageHtml = await this.buildReplyHtml(message, tierAssignment, instanceCount);
+        const blockMessageHtml = await this.buildReplyHtml(message, tierAssignment, messageCount);
         const senderRef = formatSenderRefHtml(message.senderId, message.senderUsername);
         const blocked = await this.blockOnboarding.executeBlockWithSession(
           message.sessionId,
@@ -357,13 +359,15 @@ export class ProcessIncomingMessageUseCase {
   private async buildReplyHtml(
     message: IncomingMessage,
     assignment: Assignment,
-    instanceCount: number
+    messageCount: number
   ): Promise<string> {
     const sessionUsername = this.escapeHtml(this.getSessionUsernameLabel(message));
+    const senderRef = formatSenderRefHtml(message.senderId, message.senderUsername);
     return assignment.html
       .replaceAll("{{SESSION_USERNAME}}", sessionUsername)
       .replaceAll("{{SVC_USERNAME}}", sessionUsername)
-      .replaceAll("{{X_WARNING_NUMBER}}", String(instanceCount));
+      .replaceAll("{{SENDER_USERNAME}}", senderRef)
+      .replaceAll("{{X_WARNING_NUMBER}}", String(messageCount));
   }
 
   private getSessionUsernameLabel(message: IncomingMessage): string {

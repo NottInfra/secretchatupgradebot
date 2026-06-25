@@ -17,6 +17,7 @@ const experimentDirs = [
 const COLLAPSE_SECONDS = 300;
 
 function buildUseCase(overrides: {
+  messageCount?: number;
   instanceCount?: number;
   priorBlockInSession?: boolean;
   priorBlockOther?: boolean;
@@ -40,11 +41,12 @@ function buildUseCase(overrides: {
     analytics as never,
     logger as never
   );
-  const countInstancesBySender = vi.fn(async () => overrides.instanceCount ?? 1);
+  const countInstancesBySender = vi.fn(async () => overrides.instanceCount ?? overrides.messageCount ?? 1);
 
   const useCase = new ProcessIncomingMessageUseCase(
     {
       save: vi.fn(async () => 1),
+      countBySender: vi.fn(async () => overrides.messageCount ?? overrides.instanceCount ?? 1),
       countInstancesBySender
     } as never,
     new InboundMessageDedupe(),
@@ -112,6 +114,7 @@ describe("ProcessIncomingMessageUseCase", () => {
 
   it("sends a first warning for the first message", async () => {
     const { useCase, analytics, notifications, countInstancesBySender } = buildUseCase({
+      messageCount: 1,
       instanceCount: 1
     });
     await useCase.execute(
@@ -133,7 +136,7 @@ describe("ProcessIncomingMessageUseCase", () => {
   });
 
   it("sends the same warning on the second instance", async () => {
-    const { useCase, analytics } = buildUseCase({ instanceCount: 2 });
+    const { useCase, analytics } = buildUseCase({ messageCount: 2, instanceCount: 2 });
     await useCase.execute(
       sampleMessage({
         source: "bot_api_automation",
@@ -147,7 +150,7 @@ describe("ProcessIncomingMessageUseCase", () => {
   });
 
   it("still warns when a burst message shares the same instance count", async () => {
-    const { useCase, analytics } = buildUseCase({ instanceCount: 1 });
+    const { useCase, analytics } = buildUseCase({ messageCount: 2, instanceCount: 1 });
     await useCase.execute(
       sampleMessage({
         source: "bot_api_automation",
@@ -162,13 +165,14 @@ describe("ProcessIncomingMessageUseCase", () => {
     expect(analytics.trackEvent).not.toHaveBeenCalledWith("sender_block_queued", expect.any(Object));
   });
 
-  it("substitutes the instance count into warning templates", async () => {
-    const { useCase, notifications } = buildUseCase({ instanceCount: 2 });
+  it("substitutes sender and message count into warning templates", async () => {
+    const { useCase, notifications } = buildUseCase({ messageCount: 2, instanceCount: 1 });
     await useCase.execute(
       sampleMessage({
         source: "bot_api_automation",
         businessConnectionId: "bc-1",
-        sessionOwnerUsername: "owner"
+        sessionOwnerUsername: "owner",
+        senderUsername: "spammer"
       })
     );
 
@@ -177,6 +181,8 @@ describe("ProcessIncomingMessageUseCase", () => {
       notifications.sendBusinessHTMLReply.mock.calls[0]?.[0]?.html;
     expect(html).toContain("Attempt 2");
     expect(html).toContain("@owner");
+    expect(html).toContain("@spammer");
+    expect(html).not.toContain("{{SENDER_USERNAME}}");
   });
 
   it("queues a block on the third instance", async () => {
@@ -185,7 +191,7 @@ describe("ProcessIncomingMessageUseCase", () => {
       getInputEntity: vi.fn(async () => ({})),
       invoke: vi.fn(async () => undefined)
     };
-    const { useCase, analytics } = buildUseCase({ instanceCount: 3, client });
+    const { useCase, analytics } = buildUseCase({ messageCount: 3, instanceCount: 3, client });
 
     await useCase.execute(sampleMessage());
     await flushQueue();
