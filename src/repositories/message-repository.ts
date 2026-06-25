@@ -24,6 +24,15 @@ export class MessageRepository {
     );
   }
 
+  /** Collapsed instance count for tiering — bursts within the window count as one instance. */
+  async countInstancesBySender(
+    senderId: string,
+    receiverId: string,
+    collapseWindowSeconds: number
+  ): Promise<number> {
+    return this.countBySender(senderId, receiverId, collapseWindowSeconds);
+  }
+
   /** Messages from sender within the collapse window ending at `at` (inclusive). */
   async countInMessagingInstance(
     senderId: string,

@@ -17,4 +17,12 @@ describe("SessionRepository", () => {
     expect(write).toHaveBeenCalledWith("svc_users.ensure_user", "7", expect.any(String));
     expect(write).toHaveBeenCalledWith("svc_users.set_active", "7", true, expect.any(String));
   });
+
+  it("lists active svc users", async () => {
+    const read = vi.fn(async () => [{ userId: "7", active: true }]);
+    const repo = new SessionRepository({ write: vi.fn(), read } as never);
+
+    await expect(repo.listActive()).resolves.toEqual([{ userId: "7", active: true }]);
+    expect(read).toHaveBeenCalledWith("svc_users.list_active", 3000);
+  });
 });

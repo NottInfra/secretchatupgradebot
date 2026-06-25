@@ -117,7 +117,8 @@ export async function startApp(): Promise<void> {
       notifications,
       experiments,
       blockOnboarding,
-      priorBlockOwnerPrompt
+      priorBlockOwnerPrompt,
+      env.MESSAGE_INSTANCE_COLLAPSE_SECONDS
     );
 
     const botController = new BotController(blockOnboarding, toggleModerationUseCase, notifications, logger);

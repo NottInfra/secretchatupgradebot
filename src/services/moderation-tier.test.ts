@@ -20,7 +20,7 @@ describe("decisionForTier", () => {
     expect(decisionForTier("block")).toEqual({
       action: "block",
       confidence: 1,
-      reason: "third_or_later_message_auto_block"
+      reason: "third_or_later_instance_auto_block"
     });
   });
 });

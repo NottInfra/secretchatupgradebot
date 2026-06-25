@@ -32,7 +32,8 @@ export class ProcessIncomingMessageUseCase {
     private readonly notifications: ClientNotificationService,
     private readonly experiments: ExperimentService,
     private readonly blockOnboarding: BlockOnboardingCoordinator,
-    private readonly priorBlockOwnerPrompt: SendPriorBlockOwnerPromptUseCase
+    private readonly priorBlockOwnerPrompt: SendPriorBlockOwnerPromptUseCase,
+    private readonly messageInstanceCollapseSeconds: number
   ) {}
 
   async execute(message: IncomingMessage): Promise<void> {
@@ -132,16 +133,21 @@ export class ProcessIncomingMessageUseCase {
       message.sessionId
     );
 
-    const count = await withSpan(moderationTracer, "moderation.load_history", async () =>
-      this.messages.countBySender(message.senderId, message.sessionId)
+    const instanceCount = await withSpan(moderationTracer, "moderation.load_history", async () =>
+      this.messages.countInstancesBySender(
+        message.senderId,
+        message.sessionId,
+        this.messageInstanceCollapseSeconds
+      )
     );
 
-    const tier = moderationTierForCount(count);
+    const tier = moderationTierForCount(instanceCount);
 
     this.logger.info("moderation_tier_selected", {
       senderId: message.senderId,
       sessionId: message.sessionId,
-      count,
+      instanceCount,
+      collapseWindowSeconds: this.messageInstanceCollapseSeconds,
       tier,
       priorBlockOtherAccount
     });
@@ -174,6 +180,7 @@ export class ProcessIncomingMessageUseCase {
       await this.handleWarningTier(
         message,
         incomingMessageId,
+        instanceCount,
         decision,
         tierAssignment,
         priorBlockOtherAccount
@@ -181,7 +188,7 @@ export class ProcessIncomingMessageUseCase {
       return;
     }
 
-    await this.queueBlockAction(message, incomingMessageId, decision, tierAssignment);
+    await this.queueBlockAction(message, incomingMessageId, instanceCount, decision, tierAssignment);
   }
 
   private assignTierExperiment(tier: ModerationTier, senderId: string) {
@@ -194,11 +201,12 @@ export class ProcessIncomingMessageUseCase {
   private async handleWarningTier(
     message: IncomingMessage,
     incomingMessageId: number,
+    instanceCount: number,
     decision: ModerationDecision,
     tierAssignment: Assignment,
     priorBlockOtherAccount: boolean
   ): Promise<void> {
-    const replyHtml = await this.buildReplyHtml(message, tierAssignment);
+    const replyHtml = await this.buildReplyHtml(message, tierAssignment, instanceCount);
     await withSpan(moderationTracer, "moderation.send_reply", async () =>
       this.sendFirstMessageReply(message, replyHtml, tierAssignment.mediaPath)
     );
@@ -234,6 +242,7 @@ export class ProcessIncomingMessageUseCase {
   private async queueBlockAction(
     message: IncomingMessage,
     incomingMessageId: number,
+    instanceCount: number,
     decision: ModerationDecision,
     tierAssignment: Assignment
   ): Promise<void> {
@@ -250,7 +259,7 @@ export class ProcessIncomingMessageUseCase {
           experiment: tierAssignment.experimentId,
           variant: tierAssignment.variantId
         });
-        const blockMessageHtml = await this.buildReplyHtml(message, tierAssignment);
+        const blockMessageHtml = await this.buildReplyHtml(message, tierAssignment, instanceCount);
         const senderRef = formatSenderRefHtml(message.senderId, message.senderUsername);
         const blocked = await this.blockOnboarding.executeBlockWithSession(
           message.sessionId,
@@ -345,13 +354,16 @@ export class ProcessIncomingMessageUseCase {
     await this.sendReplyToIncoming(message, html);
   }
 
-  private async buildReplyHtml(message: IncomingMessage, assignment: Assignment): Promise<string> {
-    return this.substituteSessionUsernameHtml(message, assignment.html);
-  }
-
-  private substituteSessionUsernameHtml(message: IncomingMessage, html: string): string {
-    const sessionUsername = this.getSessionUsernameLabel(message);
-    return html.replaceAll("{{SESSION_USERNAME}}", this.escapeHtml(sessionUsername));
+  private async buildReplyHtml(
+    message: IncomingMessage,
+    assignment: Assignment,
+    instanceCount: number
+  ): Promise<string> {
+    const sessionUsername = this.escapeHtml(this.getSessionUsernameLabel(message));
+    return assignment.html
+      .replaceAll("{{SESSION_USERNAME}}", sessionUsername)
+      .replaceAll("{{SVC_USERNAME}}", sessionUsername)
+      .replaceAll("{{X_WARNING_NUMBER}}", String(instanceCount));
   }
 
   private getSessionUsernameLabel(message: IncomingMessage): string {

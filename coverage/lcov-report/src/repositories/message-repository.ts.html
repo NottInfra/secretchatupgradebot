@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">64.7% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>22/34</span>
+                <span class='fraction'>34/34</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">83.33% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>5/6</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
-                <span class="quiet">Branches</span>
-                <span class='fraction'>4/4</span>
-            </div>
-        
-            
-            <div class='fl pad1y space-right2'>
-                <span class="strong">80% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>4/5</span>
+                <span class='fraction'>5/5</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">64.7% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>22/34</span>
+                <span class='fraction'>34/34</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line medium'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -108,19 +108,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -130,61 +120,71 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { IncomingMessage } from "../types.js";
 import type { Store } from "../utils/db/root.js";
 &nbsp;
 export class MessageRepository {
   constructor(private readonly store: Store) {}
 &nbsp;
-  async save(message: IncomingMessage): Promise&lt;void&gt; {
-    await this.store.write(
-      "messages.insert",
+  async save(message: IncomingMessage): Promise&lt;number&gt; {
+    const id = await this.store.write(
+      "incoming_messages.insert",
       message.senderId,
-      message.chatId,
       message.sessionId,
       message.date.toISOString()
     );
+    return <span class="branch-0 cbranch-no" title="branch not covered" >id ?? 0;</span>
   }
 &nbsp;
-  async countBySender(senderId: string, sessionId: string, collapseWindowSeconds = 0): Promise&lt;number&gt; {
+  async countBySender(senderId: string, receiverId: string, collapseWindowSeconds = 0): Promise&lt;number&gt; {
     return this.store.read&lt;number&gt;(
-      "messages.count_by_sender",
+      "incoming_messages.count_by_sender",
       0,
       senderId,
-      sessionId,
+      receiverId,
       collapseWindowSeconds
     );
   }
 &nbsp;
   /** Messages from sender within the collapse window ending at `at` (inclusive). */
-<span class="fstat-no" title="function not covered" >  async countInMessagingInstance(</span>
-<span class="cstat-no" title="statement not covered" >    senderId: string,</span>
-<span class="cstat-no" title="statement not covered" >    at: Date,</span>
-<span class="cstat-no" title="statement not covered" >    collapseWindowSeconds: number</span>
-<span class="cstat-no" title="statement not covered" >  ): Promise&lt;number&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    return this.store.read&lt;number&gt;(</span>
-<span class="cstat-no" title="statement not covered" >      "messages.count_in_instance",</span>
-<span class="cstat-no" title="statement not covered" >      0,</span>
-<span class="cstat-no" title="statement not covered" >      senderId,</span>
-<span class="cstat-no" title="statement not covered" >      at.toISOString(),</span>
-<span class="cstat-no" title="statement not covered" >      collapseWindowSeconds</span>
-<span class="cstat-no" title="statement not covered" >    );</span>
-<span class="cstat-no" title="statement not covered" >  }</span>
+  async countInMessagingInstance(
+    senderId: string,
+    at: Date,
+    collapseWindowSeconds: number
+  ): Promise&lt;number&gt; {
+    return this.store.read&lt;number&gt;(
+      "incoming_messages.count_in_instance",
+      0,
+      senderId,
+      at.toISOString(),
+      collapseWindowSeconds
+    );
+  }
 }
 &nbsp;</pre></td></tr></table></pre>
 
@@ -193,7 +193,7 @@ export class MessageRepository {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-19T15:03:49.871Z
+                at 2026-06-25T18:59:40.146Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

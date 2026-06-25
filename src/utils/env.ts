@@ -50,7 +50,9 @@ const schema = z.object({
   SESSION_PROVIDER_API_KEY: z.string().min(1),
   SESSION_PROVIDER_SVC_NAME: z.string().min(1),
   SESSION_PROVIDER_ROOT: z.string().optional(),
-  MGMT_BOT_TOKEN: z.string().optional()
+  MGMT_BOT_TOKEN: z.string().optional(),
+  /** Gap (seconds) between messages that starts a new moderation instance for block tiering. */
+  MESSAGE_INSTANCE_COLLAPSE_SECONDS: z.coerce.number().int().nonnegative().default(300)
 });
 
 export type Env = z.infer<typeof schema>;

@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">72.22% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>26/36</span>
+                <span class='fraction'>30/30</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>5/5</span>
+                <span class='fraction'>6/6</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">83.33% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>5/6</span>
+                <span class='fraction'>6/6</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">72.22% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>26/36</span>
+                <span class='fraction'>30/30</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line medium'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -102,21 +102,7 @@
 <a name='L37'></a><a href='#L37'>37</a>
 <a name='L38'></a><a href='#L38'>38</a>
 <a name='L39'></a><a href='#L39'>39</a>
-<a name='L40'></a><a href='#L40'>40</a>
-<a name='L41'></a><a href='#L41'>41</a>
-<a name='L42'></a><a href='#L42'>42</a>
-<a name='L43'></a><a href='#L43'>43</a>
-<a name='L44'></a><a href='#L44'>44</a>
-<a name='L45'></a><a href='#L45'>45</a>
-<a name='L46'></a><a href='#L46'>46</a>
-<a name='L47'></a><a href='#L47'>47</a>
-<a name='L48'></a><a href='#L48'>48</a>
-<a name='L49'></a><a href='#L49'>49</a>
-<a name='L50'></a><a href='#L50'>50</a>
-<a name='L51'></a><a href='#L51'>51</a>
-<a name='L52'></a><a href='#L52'>52</a>
-<a name='L53'></a><a href='#L53'>53</a>
-<a name='L54'></a><a href='#L54'>54</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L40'></a><a href='#L40'>40</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
@@ -138,28 +124,14 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -176,47 +148,33 @@ export class ActionLogRepository {
   constructor(private readonly store: Store) {}
 &nbsp;
   /** Sender already blocked on this owner's account. */
-  async hasPriorBlockInSession(senderId: string, sessionId: string): Promise&lt;boolean&gt; {
-    return this.store.read&lt;boolean&gt;("action_logs.has_prior_block_in_session", 0, senderId, sessionId);
+  async hasPriorBlockInSession(senderId: string, receiverId: string): Promise&lt;boolean&gt; {
+    return this.store.read&lt;boolean&gt;("action_logs.has_prior_block_in_session", 0, senderId, receiverId);
   }
 &nbsp;
   /** Sender blocked on a different owner's account (cross-account reputation). */
-  async hasPriorBlockByOtherSession(senderId: string, sessionId: string): Promise&lt;boolean&gt; {
+  async hasPriorBlockByOtherSession(senderId: string, receiverId: string): Promise&lt;boolean&gt; {
     return this.store.read&lt;boolean&gt;(
       "action_logs.has_prior_block_by_other_session",
       0,
       senderId,
-      sessionId
+      receiverId
     );
   }
 &nbsp;
-<span class="fstat-no" title="function not covered" >  async save(input: {</span>
-    senderId: string;
-    chatId: string;
-    sessionId: string;
-    decision: ModerationDecision;
-<span class="cstat-no" title="statement not covered" >  }): Promise&lt;void&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    await this.store.write(</span>
-<span class="cstat-no" title="statement not covered" >      "action_logs.insert",</span>
-<span class="cstat-no" title="statement not covered" >      input.senderId,</span>
-<span class="cstat-no" title="statement not covered" >      input.chatId,</span>
-<span class="cstat-no" title="statement not covered" >      input.sessionId,</span>
-<span class="cstat-no" title="statement not covered" >      input.decision,</span>
-<span class="cstat-no" title="statement not covered" >      new Date().toISOString()</span>
-<span class="cstat-no" title="statement not covered" >    );</span>
-<span class="cstat-no" title="statement not covered" >  }</span>
+  async save(input: { incomingMessageId: number; decision: ModerationDecision }): Promise&lt;void&gt; {
+    await this.store.write(
+      "action_logs.insert",
+      input.incomingMessageId,
+      input.decision,
+      new Date().toISOString()
+    );
+  }
 &nbsp;
-  saveDeferred(input: {
-    senderId: string;
-    chatId: string;
-    sessionId: string;
-    decision: ModerationDecision;
-  }): void {
+  saveDeferred(input: { incomingMessageId: number; decision: ModerationDecision }): void {
     this.store.writeDeferred(
       "action_logs.insert",
-      input.senderId,
-      input.chatId,
-      input.sessionId,
+      input.incomingMessageId,
       input.decision,
       new Date().toISOString()
     );
@@ -229,7 +187,7 @@ export class ActionLogRepository {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-06-19T15:03:49.871Z
+                at 2026-06-25T18:59:40.146Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

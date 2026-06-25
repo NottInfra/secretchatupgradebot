@@ -14,8 +14,10 @@ const experimentDirs = [
   path.resolve("assets/messages/messages-block")
 ];
 
+const COLLAPSE_SECONDS = 300;
+
 function buildUseCase(overrides: {
-  count?: number;
+  instanceCount?: number;
   priorBlockInSession?: boolean;
   priorBlockOther?: boolean;
   client?: object | null;
@@ -38,11 +40,12 @@ function buildUseCase(overrides: {
     analytics as never,
     logger as never
   );
+  const countInstancesBySender = vi.fn(async () => overrides.instanceCount ?? 1);
 
   const useCase = new ProcessIncomingMessageUseCase(
     {
       save: vi.fn(async () => 1),
-      countBySender: vi.fn(async () => overrides.count ?? 1)
+      countInstancesBySender
     } as never,
     new InboundMessageDedupe(),
     {
@@ -57,10 +60,11 @@ function buildUseCase(overrides: {
     notifications as never,
     experiments,
     { getTdlibForOwner: vi.fn(async () => overrides.client ?? null), executeBlockWithSession: vi.fn(async () => Boolean(overrides.client)) } as never,
-    priorBlockOwnerPrompt
+    priorBlockOwnerPrompt,
+    COLLAPSE_SECONDS
   );
 
-  return { useCase, analytics, logger, notifications };
+  return { useCase, analytics, logger, notifications, countInstancesBySender };
 }
 
 async function flushQueue(): Promise<void> {
@@ -107,7 +111,9 @@ describe("ProcessIncomingMessageUseCase", () => {
   });
 
   it("sends a first warning for the first message", async () => {
-    const { useCase, analytics, notifications } = buildUseCase({ count: 1 });
+    const { useCase, analytics, notifications, countInstancesBySender } = buildUseCase({
+      instanceCount: 1
+    });
     await useCase.execute(
       sampleMessage({
         source: "bot_api_automation",
@@ -115,6 +121,7 @@ describe("ProcessIncomingMessageUseCase", () => {
       })
     );
 
+    expect(countInstancesBySender).toHaveBeenCalledWith("sender-1", "owner-1", COLLAPSE_SECONDS);
     const sentBusinessReply =
       notifications.sendBusinessHTMLReply.mock.calls.length +
       notifications.sendBusinessMediaReply.mock.calls.length;
@@ -125,8 +132,8 @@ describe("ProcessIncomingMessageUseCase", () => {
     );
   });
 
-  it("sends the same warning on the second message", async () => {
-    const { useCase, analytics } = buildUseCase({ count: 2 });
+  it("sends the same warning on the second instance", async () => {
+    const { useCase, analytics } = buildUseCase({ instanceCount: 2 });
     await useCase.execute(
       sampleMessage({
         source: "bot_api_automation",
@@ -139,13 +146,46 @@ describe("ProcessIncomingMessageUseCase", () => {
     );
   });
 
-  it("queues a block on the third message", async () => {
+  it("still warns when a burst message shares the same instance count", async () => {
+    const { useCase, analytics } = buildUseCase({ instanceCount: 1 });
+    await useCase.execute(
+      sampleMessage({
+        source: "bot_api_automation",
+        businessConnectionId: "bc-1",
+        telegramMessageId: 99
+      })
+    );
+    expect(analytics.trackEvent).toHaveBeenCalledWith(
+      "message_warning_sent",
+      expect.any(Object)
+    );
+    expect(analytics.trackEvent).not.toHaveBeenCalledWith("sender_block_queued", expect.any(Object));
+  });
+
+  it("substitutes the instance count into warning templates", async () => {
+    const { useCase, notifications } = buildUseCase({ instanceCount: 2 });
+    await useCase.execute(
+      sampleMessage({
+        source: "bot_api_automation",
+        businessConnectionId: "bc-1",
+        sessionOwnerUsername: "owner"
+      })
+    );
+
+    const html =
+      notifications.sendBusinessMediaReply.mock.calls[0]?.[0]?.html ??
+      notifications.sendBusinessHTMLReply.mock.calls[0]?.[0]?.html;
+    expect(html).toContain("Attempt 2");
+    expect(html).toContain("@owner");
+  });
+
+  it("queues a block on the third instance", async () => {
     const client = {
       sendMessage: vi.fn(async () => ({ id: 1 })),
       getInputEntity: vi.fn(async () => ({})),
       invoke: vi.fn(async () => undefined)
     };
-    const { useCase, analytics } = buildUseCase({ count: 3, client });
+    const { useCase, analytics } = buildUseCase({ instanceCount: 3, client });
 
     await useCase.execute(sampleMessage());
     await flushQueue();
