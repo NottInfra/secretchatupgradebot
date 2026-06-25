@@ -18,7 +18,6 @@ import type { Span } from "@opentelemetry/api";
 const moderationTracer = getTracer("moderation");
 
 const LEVEL1_WARNING_EXPERIMENT_ID = "level1_message_warning";
-const LEVEL2_WARNING_FINAL_EXPERIMENT_ID = "level2_message_warning_final";
 const LEVEL3_BLOCK_EXPERIMENT_ID = "level3_messages_block";
 
 export class ProcessIncomingMessageUseCase {
@@ -173,8 +172,8 @@ export class ProcessIncomingMessageUseCase {
       tier
     });
 
-    if (tier === "first_warning" || tier === "second_warning") {
-      await this.handleWarningTier(message, tier, decision, tierAssignment, priorBlockOtherAccount);
+    if (tier === "warning") {
+      await this.handleWarningTier(message, decision, tierAssignment, priorBlockOtherAccount);
       return;
     }
 
@@ -182,18 +181,14 @@ export class ProcessIncomingMessageUseCase {
   }
 
   private assignTierExperiment(tier: ModerationTier, senderId: string) {
-    if (tier === "first_warning") {
+    if (tier === "warning") {
       return this.experiments.assignModerationTier(LEVEL1_WARNING_EXPERIMENT_ID, senderId);
-    }
-    if (tier === "second_warning") {
-      return this.experiments.assignModerationTier(LEVEL2_WARNING_FINAL_EXPERIMENT_ID, senderId);
     }
     return this.experiments.assignModerationTier(LEVEL3_BLOCK_EXPERIMENT_ID, senderId);
   }
 
   private async handleWarningTier(
     message: IncomingMessage,
-    tier: "first_warning" | "second_warning",
     decision: ModerationDecision,
     tierAssignment: Assignment,
     priorBlockOtherAccount: boolean
@@ -208,16 +203,14 @@ export class ProcessIncomingMessageUseCase {
       sessionId: message.sessionId,
       decision
     });
-    const eventName =
-      tier === "first_warning" ? "first_message_reply_sent" : "second_message_warning_sent";
-    this.analytics.trackEvent(eventName, {
+    this.analytics.trackEvent("message_warning_sent", {
       senderId: message.senderId,
       chatId: message.chatId,
       experiment: tierAssignment.experimentId,
       variant: tierAssignment.variantId,
       hasMedia: Boolean(tierAssignment.mediaPath)
     });
-    this.logger.info(eventName, {
+    this.logger.info("message_warning_sent", {
       senderId: message.senderId,
       chatId: message.chatId,
       experiment: tierAssignment.experimentId,
@@ -225,7 +218,7 @@ export class ProcessIncomingMessageUseCase {
       hasMedia: Boolean(tierAssignment.mediaPath)
     });
 
-    if (tier === "first_warning" && priorBlockOtherAccount) {
+    if (priorBlockOtherAccount) {
       this.analytics.trackEvent("cross_account_prior_block_detected", {
         senderId: message.senderId,
         chatId: message.chatId,

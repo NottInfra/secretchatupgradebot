@@ -11,7 +11,6 @@ import { mockAnalytics, mockLogger, sampleMessage } from "../test/support/mocks.
 
 const experimentDirs = [
   path.resolve("assets/messages/message-warning"),
-  path.resolve("assets/messages/message-warning-final"),
   path.resolve("assets/messages/messages-block")
 ];
 
@@ -121,7 +120,21 @@ describe("ProcessIncomingMessageUseCase", () => {
       notifications.sendBusinessMediaReply.mock.calls.length;
     expect(sentBusinessReply).toBeGreaterThan(0);
     expect(analytics.trackEvent).toHaveBeenCalledWith(
-      "first_message_reply_sent",
+      "message_warning_sent",
+      expect.any(Object)
+    );
+  });
+
+  it("sends the same warning on the second message", async () => {
+    const { useCase, analytics } = buildUseCase({ count: 2 });
+    await useCase.execute(
+      sampleMessage({
+        source: "bot_api_automation",
+        businessConnectionId: "bc-1"
+      })
+    );
+    expect(analytics.trackEvent).toHaveBeenCalledWith(
+      "message_warning_sent",
       expect.any(Object)
     );
   });
@@ -147,20 +160,6 @@ describe("ProcessIncomingMessageUseCase", () => {
     expect(analytics.trackEvent).toHaveBeenCalledWith(
       "moderation_decision",
       expect.objectContaining({ tier: "skipped_prior_block" })
-    );
-  });
-
-  it("sends a second warning on the second message", async () => {
-    const { useCase, analytics } = buildUseCase({ count: 2 });
-    await useCase.execute(
-      sampleMessage({
-        source: "bot_api_automation",
-        businessConnectionId: "bc-1"
-      })
-    );
-    expect(analytics.trackEvent).toHaveBeenCalledWith(
-      "second_message_warning_sent",
-      expect.any(Object)
     );
   });
 });

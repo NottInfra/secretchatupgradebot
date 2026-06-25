@@ -20,13 +20,25 @@
     {
       "id": "004",
       "file": "variant-004.html",
-      "media": "variant-004.mp4",
+      "media": "variant-005.mp4",
       "weight": 0
     },
     {
       "id": "005",
       "file": "variant-005.html",
       "media": "variant-005.mp4",
+      "weight": 0
+    },
+    {
+      "id": "006",
+      "file": "variant-006.html",
+      "media": "variant-006.mp4",
+      "weight": 1
+    },
+    {
+      "id": "007",
+      "file": "variant-007.html",
+      "media": "variant-006.mp4",
       "weight": 1
     }
   ]

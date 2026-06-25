@@ -63,11 +63,7 @@ export async function startApp(): Promise<void> {
     const toggleModerationUseCase = new ToggleModerationUseCase(sessions, notifications, analytics, logger);
     const messageAssetRoot = path.resolve("assets/messages");
     const experiments = new ExperimentService(
-      [
-        path.join(messageAssetRoot, "message-warning"),
-        path.join(messageAssetRoot, "message-warning-final"),
-        path.join(messageAssetRoot, "messages-block")
-      ],
+      [path.join(messageAssetRoot, "message-warning"), path.join(messageAssetRoot, "messages-block")],
       logger
     );
 

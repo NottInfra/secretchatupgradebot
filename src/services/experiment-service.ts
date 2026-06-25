@@ -100,7 +100,7 @@ export class ExperimentService {
   }
 
   /**
-   * Deterministic tier pick for the 3-step DM flow (message-warning → message-warning-final → messages-block).
+   * Deterministic tier pick for the 2-step DM flow (message-warning → messages-block).
    * Hash input omits experimentId so tiers with identical total weights (e.g. 2 vs 2) reuse the same variant slot.
    */
   assignModerationTier(experimentId: string, subjectId: string): Assignment {

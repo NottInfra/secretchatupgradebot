@@ -5,7 +5,6 @@ import { mockLogger } from "../test/support/mocks.js";
 
 const experimentDirs = [
   path.resolve("assets/messages/message-warning"),
-  path.resolve("assets/messages/message-warning-final"),
   path.resolve("assets/messages/messages-block")
 ];
 

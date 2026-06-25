@@ -1,22 +1,19 @@
-CREATE TABLE IF NOT EXISTS messages (
+CREATE TABLE IF NOT EXISTS incoming_messages (
   id BIGSERIAL PRIMARY KEY,
   sender_id TEXT NOT NULL,
-  chat_id TEXT NOT NULL,
-  session_id TEXT NOT NULL,
+  receiver_id TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS action_logs (
   id BIGSERIAL PRIMARY KEY,
-  sender_id TEXT NOT NULL,
-  chat_id TEXT NOT NULL,
-  decision_json JSONB NOT NULL,
+  incoming_message_id BIGINT NOT NULL REFERENCES incoming_messages(id),
+  decision TEXT NOT NULL CHECK (decision IN ('warn', 'block', 'approve', 'ignore')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS sessions (
+CREATE TABLE IF NOT EXISTS svc_users (
   user_id TEXT PRIMARY KEY,
-  session_string TEXT NOT NULL,
   active BOOLEAN NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -27,14 +24,9 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL DEFAULT '',
   first_name TEXT NOT NULL DEFAULT '',
   last_name TEXT NOT NULL DEFAULT '',
-  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS group_chats (
-  telegram_id BIGINT PRIMARY KEY,
-  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  bio TEXT,
+  phone_number TEXT,
+  birthday DATE,
   last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -48,9 +40,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS sessions_set_updated_at ON sessions;
-CREATE TRIGGER sessions_set_updated_at
-BEFORE UPDATE ON sessions
+DROP TRIGGER IF EXISTS svc_users_set_updated_at ON svc_users;
+CREATE TRIGGER svc_users_set_updated_at
+BEFORE UPDATE ON svc_users
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
@@ -60,8 +52,5 @@ BEFORE UPDATE ON users
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
-DROP TRIGGER IF EXISTS group_chats_set_updated_at ON group_chats;
-CREATE TRIGGER group_chats_set_updated_at
-BEFORE UPDATE ON group_chats
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at();
+CREATE INDEX IF NOT EXISTS idx_incoming_messages_sender_receiver
+  ON incoming_messages (sender_id, receiver_id);
