@@ -137,15 +137,19 @@ export class Store {
       }
     }
 
+    const queuedRun = async (): Promise<void> => {
+      await run();
+    };
+
     if (wait) {
       if (query === "incoming_messages.insert") {
         return run();
       }
-      await this.writeQueue.enqueue(query, run);
+      await this.writeQueue.enqueue(query, queuedRun);
       return;
     }
 
-    this.writeQueue.enqueueFireAndForget(query, run);
+    this.writeQueue.enqueueFireAndForget(query, queuedRun);
   }
 
   async read<T>(query: string, cacheLifetimeMs = 0, ...args: unknown[]): Promise<T> {
