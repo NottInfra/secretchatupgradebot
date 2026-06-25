@@ -15,7 +15,7 @@ describe("SendPriorBlockOwnerPromptUseCase", () => {
       mockLogger() as never
     );
 
-    await useCase.execute(sampleMessage(), {
+    await useCase.execute(sampleMessage(), 1, {
       experimentId: "exp",
       variantId: "a",
       html: "warning"

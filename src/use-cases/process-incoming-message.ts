@@ -100,7 +100,7 @@ export class ProcessIncomingMessageUseCase {
       }
     }
 
-    await this.messages.save(message);
+    const incomingMessageId = await this.messages.save(message);
     if (await this.actions.hasPriorBlockInSession(message.senderId, message.sessionId)) {
       const decision: ModerationDecision = {
         action: "ignore",
@@ -108,9 +108,7 @@ export class ProcessIncomingMessageUseCase {
         reason: "prior_block_in_session_skip"
       };
       this.actions.saveDeferred({
-        senderId: message.senderId,
-        chatId: message.chatId,
-        sessionId: message.sessionId,
+        incomingMessageId,
         decision
       });
       this.analytics.trackEvent("moderation_decision", {
@@ -173,11 +171,17 @@ export class ProcessIncomingMessageUseCase {
     });
 
     if (tier === "warning") {
-      await this.handleWarningTier(message, decision, tierAssignment, priorBlockOtherAccount);
+      await this.handleWarningTier(
+        message,
+        incomingMessageId,
+        decision,
+        tierAssignment,
+        priorBlockOtherAccount
+      );
       return;
     }
 
-    await this.queueBlockAction(message, decision, tierAssignment);
+    await this.queueBlockAction(message, incomingMessageId, decision, tierAssignment);
   }
 
   private assignTierExperiment(tier: ModerationTier, senderId: string) {
@@ -189,6 +193,7 @@ export class ProcessIncomingMessageUseCase {
 
   private async handleWarningTier(
     message: IncomingMessage,
+    incomingMessageId: number,
     decision: ModerationDecision,
     tierAssignment: Assignment,
     priorBlockOtherAccount: boolean
@@ -198,9 +203,7 @@ export class ProcessIncomingMessageUseCase {
       this.sendFirstMessageReply(message, replyHtml, tierAssignment.mediaPath)
     );
     this.actions.saveDeferred({
-      senderId: message.senderId,
-      chatId: message.chatId,
-      sessionId: message.sessionId,
+      incomingMessageId,
       decision
     });
     this.analytics.trackEvent("message_warning_sent", {
@@ -224,19 +227,18 @@ export class ProcessIncomingMessageUseCase {
         chatId: message.chatId,
         sessionId: message.sessionId
       });
-      await this.priorBlockOwnerPrompt.execute(message, tierAssignment);
+      await this.priorBlockOwnerPrompt.execute(message, incomingMessageId, tierAssignment);
     }
   }
 
   private async queueBlockAction(
     message: IncomingMessage,
+    incomingMessageId: number,
     decision: ModerationDecision,
     tierAssignment: Assignment
   ): Promise<void> {
     this.actions.saveDeferred({
-      senderId: message.senderId,
-      chatId: message.chatId,
-      sessionId: message.sessionId,
+      incomingMessageId,
       decision
     });
 

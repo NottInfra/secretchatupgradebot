@@ -17,7 +17,11 @@ export class SendPriorBlockOwnerPromptUseCase {
     private readonly logger: Logger
   ) {}
 
-  async execute(message: IncomingMessage, tierAssignment: Assignment): Promise<void> {
+  async execute(
+    message: IncomingMessage,
+    incomingMessageId: number,
+    tierAssignment: Assignment
+  ): Promise<void> {
     return withSpan(
       moderationTracer,
       "moderation.prior_block_prompt",
@@ -32,6 +36,7 @@ export class SendPriorBlockOwnerPromptUseCase {
 
         const token = this.offers.create(
           message,
+          incomingMessageId,
           tierAssignment.experimentId,
           tierAssignment.variantId
         );

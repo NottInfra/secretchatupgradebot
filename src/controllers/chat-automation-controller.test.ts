@@ -104,7 +104,7 @@ describe("ChatAutomationController", () => {
   it("logs when moderation lookup fails", async () => {
     const logger = mockLogger();
     const sessions = {
-      findByUserId: vi.fn(async () => ({ userId: "100", sessionString: "", active: true })),
+      findByUserId: vi.fn(async () => ({ userId: "100", active: true })),
       ensureUser: vi.fn()
     };
     const sessionModeration = {
@@ -132,7 +132,7 @@ describe("ChatAutomationController", () => {
       })
     };
     const sessions = {
-      findByUserId: vi.fn(async () => ({ userId: "100", sessionString: "", active: true })),
+      findByUserId: vi.fn(async () => ({ userId: "100", active: true })),
       ensureUser: vi.fn()
     };
     const sessionModeration = { isEnabled: vi.fn(async () => true) };
@@ -195,7 +195,7 @@ describe("ChatAutomationController", () => {
   it("processes inbound automation messages when moderation is enabled", async () => {
     const processIncoming = { execute: vi.fn(async () => undefined) };
     const sessions = {
-      findByUserId: vi.fn(async () => ({ userId: "100", sessionString: "", active: true })),
+      findByUserId: vi.fn(async () => ({ userId: "100", active: true })),
       ensureUser: vi.fn()
     };
     const sessionModeration = { isEnabled: vi.fn(async () => true) };
@@ -223,7 +223,7 @@ describe("ChatAutomationController", () => {
     const logger = mockLogger();
     const processIncoming = { execute: vi.fn() };
     const sessions = {
-      findByUserId: vi.fn(async () => ({ userId: "100", sessionString: "", active: true })),
+      findByUserId: vi.fn(async () => ({ userId: "100", active: true })),
       ensureUser: vi.fn()
     };
     const sessionModeration = { isEnabled: vi.fn(async () => true) };

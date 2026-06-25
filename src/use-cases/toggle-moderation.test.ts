@@ -9,7 +9,7 @@ describe("ToggleModerationUseCase", () => {
     const findByUserId = vi
       .fn()
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ userId: "42", sessionString: "", active: false });
+      .mockResolvedValueOnce({ userId: "42", active: false });
     const notifications = { sendToClient: vi.fn(async () => true) };
     const useCase = new ToggleModerationUseCase(
       { findByUserId, ensureUser, setActive } as never,
@@ -30,7 +30,7 @@ describe("ToggleModerationUseCase", () => {
     const notifications = { sendToClient: vi.fn(async () => true) };
     const useCase = new ToggleModerationUseCase(
       {
-        findByUserId: async () => ({ userId: "42", sessionString: "", active: true }),
+        findByUserId: async () => ({ userId: "42", active: true }),
         ensureUser: vi.fn(),
         setActive
       } as never,

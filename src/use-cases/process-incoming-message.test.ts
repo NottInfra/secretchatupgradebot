@@ -41,7 +41,7 @@ function buildUseCase(overrides: {
 
   const useCase = new ProcessIncomingMessageUseCase(
     {
-      save: vi.fn(async () => undefined),
+      save: vi.fn(async () => 1),
       countBySender: vi.fn(async () => overrides.count ?? 1)
     } as never,
     new InboundMessageDedupe(),

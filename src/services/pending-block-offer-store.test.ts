@@ -16,7 +16,7 @@ function sampleMessage(overrides: Partial<IncomingMessage> = {}): IncomingMessag
 describe("PendingBlockOfferStore", () => {
   it("creates and consumes offers for the matching owner", () => {
     const store = new PendingBlockOfferStore();
-    const token = store.create(sampleMessage(), "exp-1", "var-a");
+    const token = store.create(sampleMessage(), 1, "exp-1", "var-a");
     const offer = store.consume(token, "owner-1");
     expect(offer).toMatchObject({
       senderId: "sender-1",
@@ -28,7 +28,7 @@ describe("PendingBlockOfferStore", () => {
 
   it("rejects consumption for a different owner", () => {
     const store = new PendingBlockOfferStore();
-    const token = store.create(sampleMessage(), "exp-1", "var-a");
+    const token = store.create(sampleMessage(), 1, "exp-1", "var-a");
     expect(store.consume(token, "other-owner")).toBeUndefined();
   });
 });

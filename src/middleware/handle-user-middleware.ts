@@ -38,7 +38,6 @@ export class HandleUserMiddleware {
       user.lastName,
       now
     );
-    await this.store.write("group_chats.upsert_if_needed", chatId, now);
     setSpanAttributes(span, { "user.status": "ok" });
     });
   }

@@ -5,6 +5,7 @@ export type PendingBlockOffer = {
   ownerUserId: string;
   senderId: string;
   chatId: string;
+  incomingMessageId: number;
   businessConnectionId?: string;
   telegramMessageId?: number;
   sessionOwnerUsername?: string;
@@ -22,6 +23,7 @@ export class PendingBlockOfferStore {
 
   create(
     message: IncomingMessage,
+    incomingMessageId: number,
     experimentId: string,
     variantId: string
   ): string {
@@ -31,6 +33,7 @@ export class PendingBlockOfferStore {
       ownerUserId: message.sessionId,
       senderId: message.senderId,
       chatId: message.chatId,
+      incomingMessageId,
       businessConnectionId: message.businessConnectionId,
       telegramMessageId: message.telegramMessageId,
       sessionOwnerUsername: message.sessionOwnerUsername,

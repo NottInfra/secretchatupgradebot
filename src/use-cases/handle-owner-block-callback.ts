@@ -85,9 +85,7 @@ export class HandleOwnerBlockCallbackUseCase {
       }
 
       this.actions.saveDeferred({
-        senderId: offer.senderId,
-        chatId: offer.chatId,
-        sessionId: offer.ownerUserId,
+        incomingMessageId: offer.incomingMessageId,
         decision: {
           action: "block",
           confidence: 1,

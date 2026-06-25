@@ -27,6 +27,5 @@ export interface IncomingMessage {
 
 export type SessionRecord = {
   userId: string;
-  sessionString: string;
   active: boolean;
 };

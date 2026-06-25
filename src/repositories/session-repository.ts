@@ -5,22 +5,18 @@ export class SessionRepository {
   constructor(private readonly store: Store) {}
 
   async listActive(): Promise<SessionRecord[]> {
-    return this.store.read<SessionRecord[]>("sessions.list_active", 3000);
+    return this.store.read<SessionRecord[]>("svc_users.list_active", 3000);
   }
 
   async findByUserId(userId: string): Promise<SessionRecord | null> {
-    return this.store.read<SessionRecord | null>("sessions.find_by_user_id", 0, userId);
-  }
-
-  async upsertActive(userId: string, sessionString: string): Promise<void> {
-    await this.store.write("sessions.upsert_active", userId, sessionString, new Date().toISOString());
+    return this.store.read<SessionRecord | null>("svc_users.find_by_user_id", 0, userId);
   }
 
   async ensureUser(userId: string): Promise<void> {
-    await this.store.write("sessions.ensure_user", userId, new Date().toISOString());
+    await this.store.write("svc_users.ensure_user", userId, new Date().toISOString());
   }
 
   async setActive(userId: string, active: boolean): Promise<void> {
-    await this.store.write("sessions.set_active", userId, active, new Date().toISOString());
+    await this.store.write("svc_users.set_active", userId, active, new Date().toISOString());
   }
 }

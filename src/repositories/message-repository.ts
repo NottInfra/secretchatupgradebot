@@ -4,22 +4,22 @@ import type { Store } from "../utils/db/root.js";
 export class MessageRepository {
   constructor(private readonly store: Store) {}
 
-  async save(message: IncomingMessage): Promise<void> {
-    await this.store.write(
-      "messages.insert",
+  async save(message: IncomingMessage): Promise<number> {
+    const id = await this.store.write(
+      "incoming_messages.insert",
       message.senderId,
-      message.chatId,
       message.sessionId,
       message.date.toISOString()
     );
+    return id ?? 0;
   }
 
-  async countBySender(senderId: string, sessionId: string, collapseWindowSeconds = 0): Promise<number> {
+  async countBySender(senderId: string, receiverId: string, collapseWindowSeconds = 0): Promise<number> {
     return this.store.read<number>(
-      "messages.count_by_sender",
+      "incoming_messages.count_by_sender",
       0,
       senderId,
-      sessionId,
+      receiverId,
       collapseWindowSeconds
     );
   }
@@ -31,7 +31,7 @@ export class MessageRepository {
     collapseWindowSeconds: number
   ): Promise<number> {
     return this.store.read<number>(
-      "messages.count_in_instance",
+      "incoming_messages.count_in_instance",
       0,
       senderId,
       at.toISOString(),

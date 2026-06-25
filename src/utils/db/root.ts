@@ -7,6 +7,12 @@ type CacheEntry = {
   value: unknown;
 };
 
+function decisionToDbValue(decision: ModerationDecision): string {
+  if (decision.action === "block") return "block";
+  if (decision.action === "ignore") return "ignore";
+  return "warn";
+}
+
 export class Store {
   private readonly backing: Database;
   private readonly cache = new Map<string, CacheEntry>();
@@ -24,8 +30,8 @@ export class Store {
     await this.backing.close();
   }
 
-  async write(query: string, ...args: unknown[]): Promise<void> {
-    await this.persist(query, args, true);
+  async write(query: string, ...args: unknown[]): Promise<number | void> {
+    return this.persist(query, args, true);
   }
 
   /** Enqueue persistence without blocking the caller (used for non-critical audit writes). */
@@ -33,70 +39,49 @@ export class Store {
     void this.persist(query, args, false);
   }
 
-  private async persist(query: string, args: unknown[], wait: boolean): Promise<void> {
-    const run = async () => {
+  private async persist(query: string, args: unknown[], wait: boolean): Promise<number | void> {
+    const run = async (): Promise<number | void> => {
       switch (query) {
-        case "messages.insert": {
-          const [senderId, chatId, sessionId, createdAt] = args as [
-            string,
-            string,
-            string,
-            string
-          ];
-          await this.backing.query(
-            `INSERT INTO messages(sender_id, chat_id, session_id, created_at) VALUES ($1, $2, $3, $4::timestamptz)`,
-            [senderId, chatId, sessionId, createdAt]
+        case "incoming_messages.insert": {
+          const [senderId, receiverId, createdAt] = args as [string, string, string];
+          const rows = await this.backing.query<{ id: string }>(
+            `INSERT INTO incoming_messages(sender_id, receiver_id, created_at)
+             VALUES ($1, $2, $3::timestamptz)
+             RETURNING id`,
+            [senderId, receiverId, createdAt]
           );
           this.invalidateQueryCache();
-          return;
+          return Number(rows[0]?.id ?? 0);
         }
         case "action_logs.insert": {
-          const [senderId, chatId, sessionId, decision, createdAt] = args as [
-            string,
-            string,
-            string,
+          const [incomingMessageId, decision, createdAt] = args as [
+            number,
             ModerationDecision,
             string
           ];
           await this.backing.query(
-            `INSERT INTO action_logs(sender_id, chat_id, decision_json, created_at)
-             VALUES ($1, $2, $3::jsonb, $4::timestamptz)`,
-            [
-              senderId,
-              chatId,
-              JSON.stringify({ ...decision, sessionId }),
-              createdAt
-            ]
+            `INSERT INTO action_logs(incoming_message_id, decision, created_at)
+             VALUES ($1, $2, $3::timestamptz)`,
+            [incomingMessageId, decisionToDbValue(decision), createdAt]
           );
           this.invalidateQueryCache();
           return;
         }
-        case "sessions.upsert_active": {
-          const [userId, sessionString, now] = args as [string, string, string];
-          await this.backing.query(
-            `INSERT INTO sessions(user_id, session_string, active, created_at, updated_at)
-             VALUES ($1, $2, TRUE, $3::timestamptz, $3::timestamptz)
-             ON CONFLICT(user_id)
-             DO UPDATE SET session_string = EXCLUDED.session_string, active = TRUE, updated_at = EXCLUDED.updated_at`,
-            [userId, sessionString, now]
-          );
-          return;
-        }
-        case "sessions.ensure_user": {
+        case "svc_users.ensure_user": {
           const [userId, now] = args as [string, string];
           await this.backing.query(
-            `INSERT INTO sessions(user_id, session_string, active, created_at, updated_at)
-             VALUES ($1, '', FALSE, $2::timestamptz, $2::timestamptz)
+            `INSERT INTO svc_users(user_id, active, created_at, updated_at)
+             VALUES ($1, FALSE, $2::timestamptz, $2::timestamptz)
              ON CONFLICT(user_id) DO NOTHING`,
             [userId, now]
           );
           return;
         }
-        case "sessions.set_active": {
+        case "svc_users.set_active": {
           const [userId, active, now] = args as [string, boolean, string];
           await this.backing.query(
-            `INSERT INTO sessions(user_id, session_string, active, created_at, updated_at)
-             VALUES ($1, '', $2, $3::timestamptz, $3::timestamptz)
+            `INSERT INTO svc_users(user_id, active, created_at, updated_at)
+             VALUES ($1, $2, $3::timestamptz, $3::timestamptz)
              ON CONFLICT(user_id)
              DO UPDATE SET active = EXCLUDED.active, updated_at = EXCLUDED.updated_at`,
             [userId, active, now]
@@ -126,41 +111,20 @@ export class Store {
           this.invalidateQueryCache();
           return;
         }
-        case "group_chats.upsert_if_needed": {
-          const [chatId, now] = args as [number, string];
-          if (chatId >= 0) return;
-          await this.backing.query(
-            `INSERT INTO group_chats(telegram_id, first_seen_at, last_seen_at, created_at, updated_at)
-             VALUES ($1, $2::timestamptz, $2::timestamptz, $2::timestamptz, $2::timestamptz)
-             ON CONFLICT(telegram_id)
-             DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at, updated_at = NOW()`,
-            [chatId, now]
-          );
-          this.invalidateQueryCache();
-          return;
-        }
         default:
           throw new Error(`unknown write query: ${query}`);
       }
     };
 
-    if (query === "sessions.upsert_active") {
-      const [userId, sessionString] = args as [string, string, string];
-      this.putSessionCache({
-        userId,
-        sessionString,
-        active: true
-      });
-    } else if (query === "sessions.ensure_user") {
+    if (query === "svc_users.ensure_user") {
       const [userId] = args as [string, string];
       if (!this.sessionByUserId.has(userId)) {
         this.putSessionCache({
           userId,
-          sessionString: "",
           active: false
         });
       }
-    } else if (query === "sessions.set_active") {
+    } else if (query === "svc_users.set_active") {
       const [userId, active] = args as [string, boolean, string];
       const existing = this.sessionByUserId.get(userId);
       if (existing) {
@@ -168,13 +132,15 @@ export class Store {
       } else {
         this.putSessionCache({
           userId,
-          sessionString: "",
           active
         });
       }
     }
 
     if (wait) {
+      if (query === "incoming_messages.insert") {
+        return run();
+      }
       await this.writeQueue.enqueue(query, run);
       return;
     }
@@ -183,12 +149,12 @@ export class Store {
   }
 
   async read<T>(query: string, cacheLifetimeMs = 0, ...args: unknown[]): Promise<T> {
-    if (query === "sessions.find_by_user_id") {
+    if (query === "svc_users.find_by_user_id") {
       const [userId] = args as [string];
       return this.readSessionByUserId(userId) as Promise<T>;
     }
 
-    if (query === "sessions.list_active") {
+    if (query === "svc_users.list_active") {
       return this.readSessionsListActive() as Promise<T>;
     }
 
@@ -215,7 +181,7 @@ export class Store {
     if (this.sessionByUserId.has(userId)) {
       return this.sessionByUserId.get(userId) ?? null;
     }
-    const record = await this.executeRead<SessionRecord | null>("sessions.find_by_user_id", [userId]);
+    const record = await this.executeRead<SessionRecord | null>("svc_users.find_by_user_id", [userId]);
     this.sessionByUserId.set(userId, record);
     return record;
   }
@@ -224,7 +190,7 @@ export class Store {
     if (this.listActiveSnapshot) {
       return this.listActiveSnapshot;
     }
-    const rows = await this.executeRead<SessionRecord[]>("sessions.list_active", []);
+    const rows = await this.executeRead<SessionRecord[]>("svc_users.list_active", []);
     this.listActiveSnapshot = rows;
     return rows;
   }
@@ -236,16 +202,18 @@ export class Store {
 
   private async executeRead<T>(query: string, args: unknown[]): Promise<T> {
     switch (query) {
-      case "messages.count_by_sender": {
-        const [senderId, sessionId, collapseWindowSeconds = 0] = args as [
+      case "incoming_messages.count_by_sender": {
+        const [senderId, receiverId, collapseWindowSeconds = 0] = args as [
           string,
           string,
           number?
         ];
         if (collapseWindowSeconds <= 0) {
           const rows = await this.backing.query<{ n: string }>(
-            `SELECT COUNT(*)::text AS n FROM messages WHERE sender_id = $1 AND session_id = $2`,
-            [senderId, sessionId]
+            `SELECT COUNT(*)::text AS n
+             FROM incoming_messages
+             WHERE sender_id = $1 AND receiver_id = $2`,
+            [senderId, receiverId]
           );
           return Number(rows[0]?.n ?? 0) as T;
         }
@@ -255,22 +223,22 @@ export class Store {
              SELECT
                created_at,
                LAG(created_at) OVER (ORDER BY created_at) AS previous_created_at
-             FROM messages
-             WHERE sender_id = $1 AND session_id = $2
+             FROM incoming_messages
+             WHERE sender_id = $1 AND receiver_id = $2
            )
            SELECT COUNT(*)::text AS n
            FROM ordered
            WHERE previous_created_at IS NULL
               OR created_at - previous_created_at > make_interval(secs => $3)`,
-          [senderId, sessionId, collapseWindowSeconds]
+          [senderId, receiverId, collapseWindowSeconds]
         );
         return Number(rows[0]?.n ?? 0) as T;
       }
-      case "messages.count_in_instance": {
+      case "incoming_messages.count_in_instance": {
         const [senderId, atIso, collapseWindowSeconds] = args as [string, string, number];
         const rows = await this.backing.query<{ n: string }>(
           `SELECT COUNT(*)::text AS n
-           FROM messages
+           FROM incoming_messages
            WHERE sender_id = $1
              AND created_at <= $2::timestamptz
              AND created_at > $2::timestamptz - make_interval(secs => $3)`,
@@ -279,56 +247,55 @@ export class Store {
         return Number(rows[0]?.n ?? 0) as T;
       }
       case "action_logs.has_prior_block_in_session": {
-        const [senderId, sessionId] = args as [string, string];
+        const [senderId, receiverId] = args as [string, string];
         const rows = await this.backing.query<{ exists: boolean }>(
           `SELECT EXISTS (
-             SELECT 1 FROM action_logs
-             WHERE sender_id = $1
-               AND decision_json->>'action' = 'block'
-               AND decision_json->>'sessionId' = $2
+             SELECT 1
+             FROM action_logs al
+             JOIN incoming_messages im ON im.id = al.incoming_message_id
+             WHERE im.sender_id = $1
+               AND im.receiver_id = $2
+               AND al.decision = 'block'
            ) AS exists`,
-          [senderId, sessionId]
+          [senderId, receiverId]
         );
         return Boolean(rows[0]?.exists) as T;
       }
       case "action_logs.has_prior_block_by_other_session": {
-        const [senderId, sessionId] = args as [string, string];
+        const [senderId, receiverId] = args as [string, string];
         const rows = await this.backing.query<{ exists: boolean }>(
           `SELECT EXISTS (
-             SELECT 1 FROM action_logs
-             WHERE sender_id = $1
-               AND decision_json->>'action' = 'block'
-               AND decision_json->>'sessionId' IS NOT NULL
-               AND decision_json->>'sessionId' <> $2
+             SELECT 1
+             FROM action_logs al
+             JOIN incoming_messages im ON im.id = al.incoming_message_id
+             WHERE im.sender_id = $1
+               AND im.receiver_id <> $2
+               AND al.decision = 'block'
            ) AS exists`,
-          [senderId, sessionId]
+          [senderId, receiverId]
         );
         return Boolean(rows[0]?.exists) as T;
       }
-      case "sessions.list_active": {
+      case "svc_users.list_active": {
         const rows = await this.backing.query<{
           user_id: string;
-          session_string: string;
           active: boolean;
-        }>(`SELECT user_id, session_string, active FROM sessions WHERE active = TRUE`);
+        }>(`SELECT user_id, active FROM svc_users WHERE active = TRUE`);
         return rows.map((row) => ({
           userId: row.user_id,
-          sessionString: row.session_string,
           active: row.active
         })) as T;
       }
-      case "sessions.find_by_user_id": {
+      case "svc_users.find_by_user_id": {
         const [userId] = args as [string];
         const rows = await this.backing.query<{
           user_id: string;
-          session_string: string;
           active: boolean;
-        }>(`SELECT user_id, session_string, active FROM sessions WHERE user_id = $1 LIMIT 1`, [userId]);
+        }>(`SELECT user_id, active FROM svc_users WHERE user_id = $1 LIMIT 1`, [userId]);
         const row = rows[0];
         if (!row) return null as T;
         return {
           userId: row.user_id,
-          sessionString: row.session_string,
           active: row.active
         } as T;
       }

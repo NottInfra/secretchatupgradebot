@@ -14,9 +14,7 @@ describe("ActionLogRepository", () => {
     await expect(repo.hasPriorBlockByOtherSession("sender", "owner")).resolves.toBe(false);
 
     repo.saveDeferred({
-      senderId: "sender",
-      chatId: "chat",
-      sessionId: "owner",
+      incomingMessageId: 99,
       decision: { action: "block", confidence: 1, reason: "test" }
     });
 

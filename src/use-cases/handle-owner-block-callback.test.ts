@@ -21,7 +21,7 @@ describe("HandleOwnerBlockCallbackUseCase", () => {
 
   it("blocks the sender when the offer is valid", async () => {
     const offers = new PendingBlockOfferStore();
-    const token = offers.create(sampleMessage({ sessionId: "42" }), "level3_messages_block", "a");
+    const token = offers.create(sampleMessage({ sessionId: "42" }), 99, "level3_messages_block", "a");
     const executeBlockWithSession = vi.fn(async () => true);
     const notifications = { sendHTML: vi.fn(async () => true) };
 

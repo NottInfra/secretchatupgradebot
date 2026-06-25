@@ -4,7 +4,7 @@ import { SessionModerationToggleMiddleware } from "./session-moderation-toggle-m
 describe("SessionModerationToggleMiddleware", () => {
   it("returns true when the session is active", async () => {
     const middleware = new SessionModerationToggleMiddleware({
-      findByUserId: async () => ({ userId: "1", sessionString: "s", active: true })
+      findByUserId: async () => ({ userId: "1", active: true })
     } as never);
 
     await expect(middleware.isEnabled("1")).resolves.toBe(true);
@@ -12,7 +12,7 @@ describe("SessionModerationToggleMiddleware", () => {
 
   it("returns false when moderation is disabled", async () => {
     const middleware = new SessionModerationToggleMiddleware({
-      findByUserId: async () => ({ userId: "1", sessionString: "s", active: false })
+      findByUserId: async () => ({ userId: "1", active: false })
     } as never);
 
     await expect(middleware.isEnabled("1")).resolves.toBe(false);
