@@ -194,7 +194,14 @@ export class ProcessIncomingMessageUseCase {
       return;
     }
 
-    await this.queueBlockAction(message, incomingMessageId, messageCount, decision, tierAssignment);
+    await this.queueBlockAction(
+      message,
+      incomingMessageId,
+      messageCount,
+      instanceCount,
+      decision,
+      tierAssignment
+    );
   }
 
   private assignTierExperiment(tier: ModerationTier, senderId: string) {
@@ -255,14 +262,10 @@ export class ProcessIncomingMessageUseCase {
     message: IncomingMessage,
     incomingMessageId: number,
     messageCount: number,
+    instanceCount: number,
     decision: ModerationDecision,
     tierAssignment: Assignment
   ): Promise<void> {
-    this.actions.saveDeferred({
-      incomingMessageId,
-      decision
-    });
-
     await withSpan(moderationTracer, "moderation.queue_block", async () => {
       this.actionQueue.enqueue(async () => {
         this.analytics.trackEvent("sender_block_queued", {
@@ -285,6 +288,10 @@ export class ProcessIncomingMessageUseCase {
         );
 
         if (blocked) {
+          this.actions.saveDeferred({
+            incomingMessageId,
+            decision
+          });
           const noticeHtml = `We just blocked ${senderRef}. Please unblock them if you'd like any further interaction.`;
           const sentViaBot = await this.notifications.sendHTML(message.sessionId, noticeHtml);
           this.analytics.trackEvent("block_notice_sent", {
@@ -294,9 +301,31 @@ export class ProcessIncomingMessageUseCase {
             experiment: tierAssignment.experimentId,
             variant: tierAssignment.variantId
           });
-        } else {
-          this.logger.info("block_deferred_for_onboarding", { sessionId: message.sessionId });
+          return;
         }
+
+        this.logger.info("block_failed_sending_warning", {
+          senderId: message.senderId,
+          sessionId: message.sessionId
+        });
+        const warningAssignment = this.experiments.assignModerationTier(
+          LEVEL1_WARNING_EXPERIMENT_ID,
+          message.senderId
+        );
+        const warnDecision = decisionForTier("warning");
+        const priorBlockOtherAccount = await this.actions.hasPriorBlockByOtherSession(
+          message.senderId,
+          message.sessionId
+        );
+        await this.handleWarningTier(
+          message,
+          incomingMessageId,
+          messageCount,
+          instanceCount,
+          warnDecision,
+          warningAssignment,
+          priorBlockOtherAccount
+        );
       });
     });
 

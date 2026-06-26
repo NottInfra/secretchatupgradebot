@@ -17,15 +17,14 @@ describe("ExecuteModerationActionUseCase", () => {
 
   it("sends a business automation block message and blocks via tdlib", async () => {
     const notifications = { sendBusinessHTMLReply: vi.fn(async () => true) };
-    const client = {
-      invoke: vi.fn(async (query: { _: string }) => {
-        if (query._ === "getMe") return { id: 999 };
-        return undefined;
-      })
-    };
+    const invoke = vi.fn(async (query: { _: string }) => {
+      if (query._ === "getMe") return { id: 999 };
+      return undefined;
+    });
+    const client = { invoke };
     const useCase = new ExecuteModerationActionUseCase(notifications as never, mockLogger() as never);
 
-    await useCase.execute(client as never, {
+    const blocked = await useCase.execute(client as never, {
       senderId: "1",
       decision: { action: "block", confidence: 1, reason: "test" },
       blockMessageHtml: "<b>Blocked</b>",
@@ -35,8 +34,12 @@ describe("ExecuteModerationActionUseCase", () => {
       })
     });
 
+    expect(blocked).toBe(true);
     expect(notifications.sendBusinessHTMLReply).toHaveBeenCalledOnce();
-    expect(client.invoke).toHaveBeenCalledWith(
+    expect(invoke).toHaveBeenCalledWith(
+      expect.objectContaining({ _: "unblockMessageSender" })
+    );
+    expect(invoke).toHaveBeenCalledWith(
       expect.objectContaining({ _: "blockMessageSender" })
     );
   });

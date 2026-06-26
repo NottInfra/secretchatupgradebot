@@ -43,6 +43,12 @@ function buildUseCase(overrides: {
   );
   const countInstancesBySender = vi.fn(async () => overrides.instanceCount ?? overrides.messageCount ?? 1);
 
+  const actions = {
+    hasPriorBlockInSession: vi.fn(async () => overrides.priorBlockInSession ?? false),
+    hasPriorBlockByOtherSession: vi.fn(async () => overrides.priorBlockOther ?? false),
+    saveDeferred: vi.fn()
+  };
+
   const useCase = new ProcessIncomingMessageUseCase(
     {
       save: vi.fn(async () => 1),
@@ -50,11 +56,7 @@ function buildUseCase(overrides: {
       countInstancesBySender
     } as never,
     new InboundMessageDedupe(),
-    {
-      hasPriorBlockInSession: vi.fn(async () => overrides.priorBlockInSession ?? false),
-      hasPriorBlockByOtherSession: vi.fn(async () => overrides.priorBlockOther ?? false),
-      saveDeferred: vi.fn()
-    } as never,
+    actions as never,
     executeModerationAction,
     new ActionQueueService(logger as never, 0),
     analytics as never,
@@ -66,7 +68,7 @@ function buildUseCase(overrides: {
     COLLAPSE_SECONDS
   );
 
-  return { useCase, analytics, logger, notifications, countInstancesBySender };
+  return { useCase, analytics, logger, notifications, countInstancesBySender, actions };
 }
 
 async function flushQueue(): Promise<void> {
@@ -197,13 +199,39 @@ describe("ProcessIncomingMessageUseCase", () => {
       getInputEntity: vi.fn(async () => ({})),
       invoke: vi.fn(async () => undefined)
     };
-    const { useCase, analytics } = buildUseCase({ messageCount: 3, instanceCount: 3, client });
+    const { useCase, analytics, actions } = buildUseCase({ messageCount: 3, instanceCount: 3, client });
 
     await useCase.execute(sampleMessage());
     await flushQueue();
 
     expect(analytics.trackEvent).toHaveBeenCalledWith("sender_block_queued", expect.any(Object));
     expect(analytics.trackEvent).toHaveBeenCalledWith("block_notice_sent", expect.any(Object));
+    expect(actions.saveDeferred).toHaveBeenCalledWith(
+      expect.objectContaining({ decision: expect.objectContaining({ action: "block" }) })
+    );
+  });
+
+  it("falls back to warning when block tier cannot connect a session", async () => {
+    const { useCase, analytics, notifications, actions } = buildUseCase({
+      messageCount: 3,
+      instanceCount: 3,
+      client: null
+    });
+
+    await useCase.execute(
+      sampleMessage({
+        source: "bot_api_automation",
+        businessConnectionId: "bc-1"
+      })
+    );
+    await flushQueue();
+
+    expect(analytics.trackEvent).toHaveBeenCalledWith("sender_block_queued", expect.any(Object));
+    expect(notifications.sendBusinessHTMLReply).toHaveBeenCalled();
+    expect(actions.saveDeferred).toHaveBeenCalledWith(
+      expect.objectContaining({ decision: expect.objectContaining({ action: "allow" }) })
+    );
+    expect(analytics.trackEvent).not.toHaveBeenCalledWith("block_notice_sent", expect.any(Object));
   });
 
   it("skips senders with a prior block in the same session", async () => {

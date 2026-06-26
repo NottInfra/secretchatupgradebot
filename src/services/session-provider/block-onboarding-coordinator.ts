@@ -127,8 +127,7 @@ export class BlockOnboardingCoordinator {
   ): Promise<boolean> {
     const client = await this.ownerSessions.getTdlibForOwner(ownerUserId);
     if (client) {
-      await this.executeModerationAction.execute(client, block);
-      return true;
+      return this.executeModerationAction.execute(client, block);
     }
 
     await this.requestPhoneForBlock(ownerUserId, block, senderRef);

@@ -100,7 +100,7 @@ describe("BlockOnboardingCoordinator", () => {
 
   it("executes immediately when session already exists", async () => {
     const client = { invoke: vi.fn() };
-    const execute = vi.fn(async () => undefined);
+    const execute = vi.fn(async () => true);
     const { coordinator, executeModerationAction } = buildCoordinator({ client, execute });
 
     const executed = await coordinator.executeBlockWithSession("owner-1", block, "@sender");

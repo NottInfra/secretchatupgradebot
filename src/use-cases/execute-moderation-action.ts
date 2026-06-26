@@ -27,8 +27,8 @@ export class ExecuteModerationActionUseCase {
       blockMessageHtml?: string;
       moderationIncoming?: IncomingMessage;
     }
-  ): Promise<void> {
-    if (input.decision.action !== "block") return;
+  ): Promise<boolean> {
+    if (input.decision.action !== "block") return false;
 
     return withSpan(
       moderationTracer,
@@ -38,16 +38,16 @@ export class ExecuteModerationActionUseCase {
           "telegram.sender_id": input.senderId,
           "telegram.chat_id": input.moderationIncoming?.chatId
         });
-        await this.executeBlock(client, input);
+        return this.executeBlock(client, input);
       }
     );
   }
 
-  private async executeBlock(client: TdlibClient, input: BlockInput): Promise<void> {
+  private async executeBlock(client: TdlibClient, input: BlockInput): Promise<boolean> {
     const body = input.blockMessageHtml?.trim();
     if (!body) {
       this.logger.error("missing_block_template", { senderId: input.senderId });
-      return;
+      return false;
     }
 
     const replyToMsgId =
@@ -60,19 +60,22 @@ export class ExecuteModerationActionUseCase {
     const viaBusinessAutomation =
       input.moderationIncoming?.source === "bot_api_automation" && Boolean(businessConnectionId);
 
-    if (viaBusinessAutomation) {
-      const sent = await this.sendBlockViaBusinessAutomation(
-        input,
-        body,
-        businessConnectionId!,
-        replyToMsgId
-      );
-      if (!sent) return;
-      await this.blockContact(client, input.senderId);
-      return;
+    if (!viaBusinessAutomation) {
+      this.logger.warn("block_without_business_automation", { senderId: input.senderId });
+      return false;
     }
 
-    this.logger.warn("block_without_business_automation", { senderId: input.senderId });
+    await this.unblockContact(client, input.senderId);
+
+    const sent = await this.sendBlockViaBusinessAutomation(
+      input,
+      body,
+      businessConnectionId!,
+      replyToMsgId
+    );
+    if (!sent) return false;
+
+    return this.blockContact(client, input.senderId);
   }
 
   private async sendBlockViaBusinessAutomation(
@@ -105,18 +108,36 @@ export class ExecuteModerationActionUseCase {
     return true;
   }
 
-  private async blockContact(client: TdlibClient, senderId: string): Promise<void> {
+  private async unblockContact(client: TdlibClient, senderId: string): Promise<void> {
+    const userId = Number(senderId);
+    if (!Number.isFinite(userId)) return;
+
+    try {
+      await withSpan(moderationTracer, "moderation.unblock_contact", async () =>
+        client.invoke({
+          _: "unblockMessageSender",
+          sender_id: { _: "messageSenderUser", user_id: userId },
+          block_list: { _: "blockListMain" }
+        })
+      );
+      this.logger.info("sender_unblocked_for_notice", { senderId });
+    } catch (error) {
+      this.logger.debug("unblock_before_notice_skipped", { senderId, error: String(error) });
+    }
+  }
+
+  private async blockContact(client: TdlibClient, senderId: string): Promise<boolean> {
     const userId = Number(senderId);
     if (!Number.isFinite(userId)) {
       this.logger.error("failed_contacts_block_invalid_sender", { senderId });
-      return;
+      return false;
     }
 
     try {
       const me = await client.invoke({ _: "getMe" }) as { id?: number };
       if (me.id === userId) {
         this.logger.info("contacts_block_skipped_self_peer", { senderId });
-        return;
+        return false;
       }
     } catch (error) {
       this.logger.warn("contacts_block_get_me_failed", { senderId, error: String(error) });
@@ -131,11 +152,13 @@ export class ExecuteModerationActionUseCase {
         })
       );
       this.logger.info("sender_blocked", { senderId });
+      return true;
     } catch (error) {
       this.logger.error("failed_contacts_block", {
         senderId,
         error: String(error)
       });
+      return false;
     }
   }
 }
