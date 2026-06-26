@@ -81,7 +81,24 @@ export class OwnerSessionService {
   async getTdlibForOwner(ownerTelegramId: string, phone?: string): Promise<TdlibClient | undefined> {
     const session = await this.ensureOwnerSession(ownerTelegramId, phone);
     if (!session) return undefined;
-    return this.connectTdlib(session);
+
+    const client = await this.connectTdlib(session);
+    if (client) return client;
+
+    const phoneTrimmed = phone?.trim();
+    if (!phoneTrimmed) return undefined;
+
+    this.logger.info("owner_session_reonboarding", { ownerTelegramId, accountId: session.accountId });
+    this.clients.delete(session.accountId);
+
+    const onboarded = await this.onboardOwner(ownerTelegramId, phoneTrimmed);
+    if (onboarded?.step !== "complete") return undefined;
+
+    const service = await this.requireService();
+    const freshSession = await this.grantSession(service, onboarded.accountId, ownerTelegramId);
+    if (!freshSession) return undefined;
+
+    return this.connectTdlib(freshSession);
   }
 
   async ensureOwnerSession(ownerTelegramId: string, phone?: string): Promise<Session | undefined> {

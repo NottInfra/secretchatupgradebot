@@ -262,6 +262,31 @@ describe("OwnerSessionService", () => {
     );
   });
 
+  it("re-onboards when tdlib login fails but phone is provided", async () => {
+    tdlibClient.login
+      .mockRejectedValueOnce(new Error("session_not_authorized accountId=acc-1"))
+      .mockResolvedValueOnce(undefined);
+    const request = vi.fn(async (method: string) => {
+      if (method === "onboard.start") {
+        return { step: "complete", accountId: "acc-1" };
+      }
+      return undefined;
+    });
+    const { ownerSessions, logger } = buildService({ request });
+    const client = await ownerSessions.getTdlibForOwner("12345", "+447561231794");
+
+    expect(client).toBe(tdlibClient);
+    expect(request).toHaveBeenCalledWith(
+      "onboard.start",
+      expect.objectContaining({ phone: "+447561231794", svcName: "secretchatupgradebot" })
+    );
+    expect(logger.info).toHaveBeenCalledWith(
+      "owner_session_reonboarding",
+      expect.objectContaining({ ownerTelegramId: "12345" })
+    );
+    expect(tdlibClient.login).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects invalid onboarding responses", async () => {
     const { ownerSessions, logger } = buildService({
       lookup: vi.fn(async () => {

@@ -44,7 +44,8 @@ describe("BlockOnboardingCoordinator", () => {
   });
 
   it("queues additional blocks while phone is pending", async () => {
-    const { coordinator, notifications } = buildCoordinator();
+    const client = { invoke: vi.fn() };
+    const { coordinator, notifications } = buildCoordinator({ client });
     await coordinator.requestPhoneForBlock("owner-1", block, "@sender");
     await coordinator.requestPhoneForBlock("owner-1", { ...block, senderId: "sender-2" }, "@sender2");
 
@@ -70,7 +71,10 @@ describe("BlockOnboardingCoordinator", () => {
     await coordinator.requestPhoneForBlock("owner-1", block, "@sender");
     await coordinator.onPhoneSubmitted("owner-1", "+447700900123");
 
-    expect(notifications.sendToClient).toHaveBeenCalledWith("owner-1", "Connecting your Telegram session…");
+    expect(notifications.sendToClient).toHaveBeenCalledWith(
+      "owner-1",
+      expect.stringContaining("Connecting your Telegram session")
+    );
     expect(executeModerationAction.execute).toHaveBeenCalledWith(client, block);
   });
 
@@ -79,10 +83,19 @@ describe("BlockOnboardingCoordinator", () => {
     await coordinator.requestPhoneForBlock("owner-1", block, "@sender");
     await coordinator.onPhoneSubmitted("owner-1", "+447700900123");
 
+    expect(coordinator.isAwaitingPhone("owner-1")).toBe(true);
     expect(notifications.sendToClient).toHaveBeenLastCalledWith(
       "owner-1",
-      expect.stringContaining("Could not connect your Telegram session")
+      expect.stringContaining("Could not connect your Telegram session yet")
     );
+  });
+
+  it("starts proactive session connect with /connect flow", async () => {
+    const { coordinator, notifications } = buildCoordinator();
+    await coordinator.requestSessionConnect("owner-1");
+
+    expect(coordinator.isAwaitingPhone("owner-1")).toBe(true);
+    expect(notifications.sendHTML).toHaveBeenCalledWith("owner-1", expect.stringContaining("Connect your Telegram session"));
   });
 
   it("executes immediately when session already exists", async () => {

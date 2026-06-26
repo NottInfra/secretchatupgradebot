@@ -29,6 +29,19 @@ describe("BotController", () => {
     expect(notifications.sendToClient).toHaveBeenCalledWith("9", "command failed");
   });
 
+  it("starts session connect flow", async () => {
+    const blockOnboarding = { requestSessionConnect: vi.fn(async () => undefined) };
+    const controller = new BotController(
+      blockOnboarding as never,
+      {} as never,
+      { sendToClient: vi.fn() } as never,
+      mockLogger() as never
+    );
+
+    await controller.handleConnect(9);
+    expect(blockOnboarding.requestSessionConnect).toHaveBeenCalledWith("9");
+  });
+
   it("forwards phone text during block onboarding", async () => {
     const blockOnboarding = {
       isAwaitingPhone: vi.fn(() => true),

@@ -95,6 +95,9 @@ export class BotRoutes {
             case "/toggle":
               await controller.handleToggleOnOff(userId);
               return;
+            case "/connect":
+              await controller.handleConnect(userId);
+              return;
             default:
               return;
           }

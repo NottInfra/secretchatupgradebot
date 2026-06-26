@@ -16,9 +16,26 @@ export class BotController {
     await this.guard(
       async () => {
         await this.notifications.sendHTMLFile(String(userId), path.resolve("assets/policies/start.html"));
+        if (this.blockOnboarding.isAwaitingPhone(String(userId))) {
+          await this.notifications.sendToClient(
+            String(userId),
+            "Your session connection is still in progress — send your phone number or complete the login link above."
+          );
+        }
       },
       async () => {
         await this.notifications.sendToClient(String(userId), "command failed");
+      }
+    );
+  }
+
+  async handleConnect(userId: number): Promise<void> {
+    await this.guard(
+      async () => {
+        await this.blockOnboarding.requestSessionConnect(String(userId));
+      },
+      async () => {
+        await this.notifications.sendToClient(String(userId), "Could not start session connection. Try again.");
       }
     );
   }
