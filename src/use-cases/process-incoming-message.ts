@@ -175,7 +175,10 @@ export class ProcessIncomingMessageUseCase {
       confidence: decision.confidence,
       experiment: tierAssignment.experimentId,
       variant: tierAssignment.variantId,
-      tier
+      tier,
+      messageCount,
+      instanceCount,
+      collapseWindowSeconds: this.messageInstanceCollapseSeconds
     });
 
     if (tier === "warning") {
@@ -183,6 +186,7 @@ export class ProcessIncomingMessageUseCase {
         message,
         incomingMessageId,
         messageCount,
+        instanceCount,
         decision,
         tierAssignment,
         priorBlockOtherAccount
@@ -204,6 +208,7 @@ export class ProcessIncomingMessageUseCase {
     message: IncomingMessage,
     incomingMessageId: number,
     messageCount: number,
+    instanceCount: number,
     decision: ModerationDecision,
     tierAssignment: Assignment,
     priorBlockOtherAccount: boolean
@@ -221,14 +226,19 @@ export class ProcessIncomingMessageUseCase {
       chatId: message.chatId,
       experiment: tierAssignment.experimentId,
       variant: tierAssignment.variantId,
-      hasMedia: Boolean(tierAssignment.mediaPath)
+      hasMedia: Boolean(tierAssignment.mediaPath),
+      messageCount,
+      instanceCount,
+      collapseWindowSeconds: this.messageInstanceCollapseSeconds
     });
     this.logger.info("message_warning_sent", {
       senderId: message.senderId,
       chatId: message.chatId,
       experiment: tierAssignment.experimentId,
       variant: tierAssignment.variantId,
-      hasMedia: Boolean(tierAssignment.mediaPath)
+      hasMedia: Boolean(tierAssignment.mediaPath),
+      messageCount,
+      instanceCount
     });
 
     if (priorBlockOtherAccount) {
@@ -340,8 +350,10 @@ export class ProcessIncomingMessageUseCase {
     }
 
     if (mediaPath) {
+      await this.sendReplyToIncoming(message, html);
       const sent = await this.notifications.sendBusinessMediaReply({
-        ...this.businessReplyInput(message, html),
+        businessConnectionId: message.businessConnectionId!,
+        chatId: message.chatId,
         mediaPath
       });
       if (!sent) {

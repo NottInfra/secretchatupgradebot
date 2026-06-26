@@ -165,8 +165,8 @@ describe("ProcessIncomingMessageUseCase", () => {
     expect(analytics.trackEvent).not.toHaveBeenCalledWith("sender_block_queued", expect.any(Object));
   });
 
-  it("substitutes sender and message count into warning templates", async () => {
-    const { useCase, notifications } = buildUseCase({ messageCount: 2, instanceCount: 1 });
+  it("sends text first then media as a follow-up when a variant has media", async () => {
+    const { useCase, notifications } = buildUseCase({ messageCount: 1, instanceCount: 1 });
     await useCase.execute(
       sampleMessage({
         source: "bot_api_automation",
@@ -176,11 +176,17 @@ describe("ProcessIncomingMessageUseCase", () => {
       })
     );
 
-    const html =
-      notifications.sendBusinessMediaReply.mock.calls[0]?.[0]?.html ??
-      notifications.sendBusinessHTMLReply.mock.calls[0]?.[0]?.html;
-    expect(html).toContain("Attempt 2");
-    expect(html).toContain("@owner");
+    expect(notifications.sendBusinessHTMLReply).toHaveBeenCalledOnce();
+    expect(notifications.sendBusinessMediaReply).toHaveBeenCalledOnce();
+    expect(notifications.sendBusinessMediaReply.mock.calls[0]?.[0]).toMatchObject({
+      businessConnectionId: "bc-1",
+      chatId: "chat-1",
+      mediaPath: expect.stringContaining("variant-006.mp4")
+    });
+    expect(notifications.sendBusinessMediaReply.mock.calls[0]?.[0]?.html).toBeUndefined();
+
+    const html = notifications.sendBusinessHTMLReply.mock.calls[0]?.[0]?.html;
+    expect(html).toContain("Attempt 1");
     expect(html).toContain("@spammer");
     expect(html).not.toContain("{{SENDER_USERNAME}}");
   });

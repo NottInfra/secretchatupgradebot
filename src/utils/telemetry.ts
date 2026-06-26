@@ -185,7 +185,15 @@ export function recordAnalyticsMetric(name: string, props: Record<string, unknow
 }
 
 export function recordAnalyticsEvent(name: string, props: Record<string, unknown>): void {
-  recordAnalyticsMetric(name, props);
+  const span = trace.getActiveSpan();
+  const spanContext = span?.spanContext();
+  const traceProps =
+    spanContext && trace.isSpanContextValid(spanContext)
+      ? { traceId: spanContext.traceId, spanId: spanContext.spanId }
+      : {};
+
+  const enriched = { ...props, ...traceProps };
+  recordAnalyticsMetric(name, enriched);
   if (!analyticsLogger) return;
 
   analyticsLogger.emit({
@@ -195,7 +203,7 @@ export function recordAnalyticsEvent(name: string, props: Record<string, unknown
     attributes: {
       event: name,
       "deployment.environment": deploymentEnvironment(),
-      ...attrProps(props)
+      ...attrProps(enriched)
     }
   });
 }

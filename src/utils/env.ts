@@ -18,15 +18,6 @@ const boolish = z
     return s === "1" || s === "true" || s === "yes" || s === "on";
   });
 
-const boolishFalse = z
-  .string()
-  .optional()
-  .transform((v) => {
-    if (v === undefined || v.trim() === "") return false;
-    const s = v.trim().toLowerCase();
-    return s === "1" || s === "true" || s === "yes" || s === "on";
-  });
-
 const schema = z.object({
   NODE_ENV: z
     .preprocess(
@@ -35,12 +26,6 @@ const schema = z.object({
     ),
   DATABASE_URL: z.string().min(1),
   DATABASE_SSL: boolish,
-  DATABASE_USE_IAM: boolishFalse,
-  DATABASE_IAM_REGION: z.string().optional(),
-  DATABASE_IAM_HOST: z.string().optional(),
-  DATABASE_IAM_PORT: z.coerce.number().default(5432),
-  DATABASE_IAM_USER: z.string().optional(),
-  DATABASE_IAM_DBNAME: z.string().optional(),
   LOG_LEVEL: z.string().default("info"),
   PORT: z.coerce.number().default(3000),
   TELEGRAM_API_ID: z.coerce.number().finite().positive(),
@@ -52,7 +37,7 @@ const schema = z.object({
   SESSION_PROVIDER_ROOT: z.string().optional(),
   MGMT_BOT_TOKEN: z.string().optional(),
   /** Gap (seconds) between messages that starts a new moderation instance for block tiering. */
-  MESSAGE_INSTANCE_COLLAPSE_SECONDS: z.coerce.number().int().nonnegative().default(300)
+  MESSAGE_INSTANCE_COLLAPSE_SECONDS: z.coerce.number().int().nonnegative()
 });
 
 export type Env = z.infer<typeof schema>;
@@ -131,11 +116,20 @@ function loadFromEnvFile(nodeEnv: NodeEnv): void {
   }
 }
 
+/** Fill unset process.env keys from the env file without overriding injected secrets. */
+function mergeEnvFile(nodeEnv: NodeEnv): void {
+  const file = resolve(envFileForNodeEnv(nodeEnv));
+  if (!existsSync(file)) return;
+  dotenv.config({ path: file });
+}
+
 export async function initEnv(): Promise<Env> {
   if (envCache) return envCache;
 
   const nodeEnv = normalizeNodeEnv(process.env.NODE_ENV);
   process.env.NODE_ENV = nodeEnv;
+
+  mergeEnvFile(nodeEnv);
 
   if (!secretsAlreadyInjected()) {
     const vaultToken = process.env.VAULT_READ_TOKEN?.trim();

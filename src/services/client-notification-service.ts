@@ -10,7 +10,7 @@ const notificationTracer = getTracer("notification");
 export type BusinessAutomationReplyInput = {
   businessConnectionId: string;
   chatId: string;
-  html: string;
+  html?: string;
   replyToMessageId?: number;
 };
 
@@ -232,6 +232,11 @@ export class ClientNotificationService {
             : {};
 
         try {
+          const captionParams =
+            input.html != null && input.html.trim().length > 0
+              ? { caption: input.html, parse_mode: "HTML" as const }
+              : {};
+
           if (isVideo) {
             await this.bot.telegram.callApi(
               "sendVideo",
@@ -239,8 +244,7 @@ export class ClientNotificationService {
                 business_connection_id: input.businessConnectionId,
                 chat_id: chatId,
                 video: Input.fromLocalFile(input.mediaPath),
-                caption: input.html,
-                parse_mode: "HTML",
+                ...captionParams,
                 ...replyParams
               } as Parameters<typeof this.bot.telegram.callApi>[1]
             );
@@ -251,8 +255,7 @@ export class ClientNotificationService {
                 business_connection_id: input.businessConnectionId,
                 chat_id: chatId,
                 photo: Input.fromLocalFile(input.mediaPath),
-                caption: input.html,
-                parse_mode: "HTML",
+                ...captionParams,
                 ...replyParams
               } as Parameters<typeof this.bot.telegram.callApi>[1]
             );
@@ -269,7 +272,15 @@ export class ClientNotificationService {
             mediaPath: input.mediaPath,
             error: String(error)
           });
-          return this.sendBusinessHTMLReply(input);
+          if (input.html != null && input.html.trim().length > 0) {
+            return this.sendBusinessHTMLReply({
+              businessConnectionId: input.businessConnectionId,
+              chatId: input.chatId,
+              html: input.html,
+              replyToMessageId: input.replyToMessageId
+            });
+          }
+          return false;
         }
       }
     );

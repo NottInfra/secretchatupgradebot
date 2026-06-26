@@ -17,12 +17,7 @@ vi.mock("pg", () => ({
 const envState = {
   DATABASE_URL: "postgresql://user:pass@host.example/db?sslmode=require&channel_binding=require",
   DATABASE_SSL: true,
-  DATABASE_USE_IAM: false,
-  DATABASE_IAM_REGION: "",
-  DATABASE_IAM_HOST: "",
-  DATABASE_IAM_PORT: 5432,
-  DATABASE_IAM_USER: "",
-  DATABASE_IAM_DBNAME: ""
+  MESSAGE_INSTANCE_COLLAPSE_SECONDS: 30
 };
 
 vi.mock("../env.js", () => ({
@@ -41,7 +36,7 @@ describe("Database", () => {
     envState.DATABASE_URL =
       "postgresql://user:pass@host.example/db?sslmode=require&channel_binding=require";
     envState.DATABASE_SSL = true;
-    envState.DATABASE_USE_IAM = false;
+    envState.MESSAGE_INSTANCE_COLLAPSE_SECONDS = 30;
   });
 
   it("strips channel_binding and sslmode when DATABASE_SSL is enabled", () => {

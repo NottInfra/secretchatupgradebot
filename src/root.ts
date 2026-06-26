@@ -49,6 +49,10 @@ export async function startApp(): Promise<void> {
     async () => {
     store = new Store();
     const logger = new Logger();
+    logger.info("config_loaded", {
+      messageInstanceCollapseSeconds: env.MESSAGE_INSTANCE_COLLAPSE_SECONDS,
+      nodeEnv: env.NODE_ENV
+    });
     const analytics = new Analytics();
     const handleUserMiddleware = new HandleUserMiddleware(store, analytics);
     const messages = new MessageRepository(store);
