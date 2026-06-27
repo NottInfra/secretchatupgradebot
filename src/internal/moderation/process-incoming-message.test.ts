@@ -206,7 +206,7 @@ describe("ProcessIncomingMessageUseCase", () => {
     expect(notifications.sendBusinessMediaReply.mock.calls[0]?.[0]).toMatchObject({
       businessConnectionId: "bc-1",
       chatId: "chat-1",
-      mediaPath: expect.stringContaining("variant-007.mov")
+      mediaPath: expect.stringContaining("variant-007.mp4")
     });
     expect(notifications.sendBusinessMediaReply.mock.calls[0]?.[0]?.html).toBeUndefined();
 
