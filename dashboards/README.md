@@ -54,5 +54,5 @@ Dashboard UID/title include the environment (`secretchatonly-bot-test` / `secret
 
 - `devops/servers/mono/configs/kibana/dashboards/secretchatonly-bot.ndjson`
 - `devops/servers/mono/configs/grafana/dashboards/secretchatonly-bot.json`
-- `devops/servers/mono/configs/elasticsearch/index-templates/secretchatonly-bot-analytics.json` ← copy from `assets/elasticsearch/analytics-index-template.json`
+- `devops/servers/mono/configs/elasticsearch/index-templates/secretchatonly-bot-analytics.json` ← same shape as `observability_analytics_index_template_body` in `cmd/lib/observability.sh` (`{project}-analytics*`, dynamic mappings)
 - `devops/servers/mono/configs/grafana/provisioning/alerting/secretchatonly-bot-{test,production}.yml` ← written by `apply-alerts`

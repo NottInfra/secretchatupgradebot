@@ -175,23 +175,36 @@ observability_apply_grafana_alerting_rules() {
   done < <(jq -c '.rules[]' "$rules_file")
 }
 
+observability_analytics_index_template_body() {
+  local project_name="$1"
+  jq -n --arg pattern "${project_name}-analytics*" '{
+    index_patterns: [$pattern],
+    data_stream: {},
+    priority: 10000,
+    template: {
+      mappings: {
+        dynamic: true
+      }
+    }
+  }'
+}
+
 observability_apply_elasticsearch() {
   local root="$1"
-  local template_file="${root}/assets/elasticsearch/analytics-index-template.json"
-  local project_name data_stream template_id
+  local project_name data_stream template_id template_body
   project_name="$(project_yaml_get project)"
   data_stream="${project_name}-analytics"
   template_id="${data_stream}"
   local es_url="${ES_URL:-http://127.0.0.1:9200}"
   observability_elastic_auth
 
-  [[ -f "$template_file" ]] || { echo "[!] Missing $template_file"; exit 1; }
+  template_body="$(observability_analytics_index_template_body "$project_name")"
 
   echo "== Elasticsearch: $es_url =="
   echo "== index template ($template_id) =="
   observability_curl_f "$OBS_ELASTIC_USERPASS" -X PUT "$es_url/_index_template/$template_id" \
     -H 'Content-Type: application/json' \
-    --data-binary "@$template_file"
+    -d "$template_body"
   echo
 
   if [[ "${SKIP_BOOTSTRAP:-0}" != "1" ]]; then
@@ -359,7 +372,6 @@ observability_run_on_mono() {
   trap 'rm -rf "$stage"' RETURN
 
   mkdir -p \
-    "$stage/assets/elasticsearch" \
     "$stage/dashboards" \
     "$stage/alerts" \
     "$stage/cmd/lib" \
@@ -369,7 +381,6 @@ observability_run_on_mono() {
   cp "${root}/cmd/lib/project.sh" "$stage/cmd/lib/"
   cp "${root}/cmd/lib/observability.sh" "$stage/cmd/lib/"
   cp "${root}/docs/project.yml" "$stage/docs/"
-  cp "${root}/assets/elasticsearch/analytics-index-template.json" "$stage/assets/elasticsearch/"
 
   if [[ "$mode" == dashboards ]]; then
     cp "${root}/dashboards/kibana.ndjson" "$stage/dashboards/"
