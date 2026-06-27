@@ -3,7 +3,6 @@ import {
   BLOCK_START_NEWLINE,
   extractHref,
   isAsciiLetterOrDigit,
-  isWhitespace,
   parseTagAt
 } from "./parser.js";
 

@@ -32,23 +32,31 @@ export class ChatAutomationController {
     const bcId = msg.business_connection_id;
     if (!bcId) return false;
 
-    return withRootSpan(chatAutomationTracer, "chat_automation.handle_update", async (span) => {
+    await withRootSpan(chatAutomationTracer, "chat_automation.handle_update", async (span) => {
       setSpanAttributes(span, {
         "telegram.business_connection_id": bcId,
         "telegram.chat_id": String(msg.chat.id),
         "telegram.message_id": msg.message_id
       });
-
-      const owner = await this.resolveOwner(ctx, bcId);
-      if (!owner) return true;
-
-      if (!(await this.ensureSessionReady(owner.ownerUserId, bcId))) return true;
-      if (!(await this.isModerationEnabled(owner.ownerUserId, bcId))) return true;
-      if (this.shouldSkipMessage(msg, from, owner.ownerUserId)) return true;
-
-      await this.processMessage(msg, from, owner, bcId);
-      return true;
+      await this.handleAutomationUpdate(ctx, msg, from, bcId);
     });
+    return true;
+  }
+
+  private async handleAutomationUpdate(
+    ctx: Context,
+    msg: NonNullable<ReturnType<typeof extractAutomationMessage>>,
+    from: NonNullable<NonNullable<ReturnType<typeof extractAutomationMessage>>["from"]>,
+    businessConnectionId: string
+  ): Promise<void> {
+    const owner = await this.resolveOwner(ctx, businessConnectionId);
+    if (!owner) return;
+
+    if (!(await this.ensureSessionReady(owner.ownerUserId, businessConnectionId))) return;
+    if (!(await this.isModerationEnabled(owner.ownerUserId, businessConnectionId))) return;
+    if (this.shouldSkipMessage(msg, from, owner.ownerUserId)) return;
+
+    await this.processMessage(msg, from, owner, businessConnectionId);
   }
 
   private async resolveOwner(

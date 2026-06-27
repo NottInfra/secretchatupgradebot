@@ -2,8 +2,7 @@ import type { IncomingMessage } from "../lib/types/index.js";
 import type { IClientNotifications } from "../notifications/ports/client-notifications.port.js";
 import type { Logger } from "../lib/logger.js";
 import type { OwnerSessionService } from "./owner-session-service.js";
-import type { IExecuteModerationAction } from "./ports/execute-moderation-action.port.js";
-import type { BlockActionInput } from "./ports/execute-moderation-action.port.js";
+import type { BlockActionInput, IExecuteModerationAction } from "./ports/execute-moderation-action.port.js";
 
 type PendingBlock = BlockActionInput & { blockMessageHtml: string; moderationIncoming: IncomingMessage };
 

@@ -72,7 +72,7 @@ export class ModerationSkipEvaluator {
 
     const msgId = message.telegramMessageId;
     if (msgId != null && msgId > 0) {
-      const claimed = await this.dedupe.tryClaim(message.chatId, msgId);
+      const claimed = this.dedupe.tryClaim(message.chatId, msgId);
       if (!claimed) {
         return skipDuplicate(message, msgId, this.analytics, this.logger);
       }

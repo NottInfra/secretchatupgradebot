@@ -4,7 +4,7 @@ import { mockAnalytics, mockLogger, sampleMessage } from "../test/support/mocks.
 
 describe("ModerationSkipEvaluator", () => {
   it("skips bot senders", async () => {
-    const dedupe = { tryClaim: vi.fn(async () => true) };
+    const dedupe = { tryClaim: vi.fn(() => true) };
     const evaluator = new ModerationSkipEvaluator(dedupe as never, mockAnalytics() as never, mockLogger() as never);
     const result = await evaluator.evaluate(sampleMessage({ senderIsBot: true }));
     expect(result).toEqual({ skip: true });
@@ -12,7 +12,7 @@ describe("ModerationSkipEvaluator", () => {
   });
 
   it("skips owner outbound automation messages", async () => {
-    const dedupe = { tryClaim: vi.fn(async () => true) };
+    const dedupe = { tryClaim: vi.fn(() => true) };
     const evaluator = new ModerationSkipEvaluator(dedupe as never, mockAnalytics() as never, mockLogger() as never);
     const result = await evaluator.evaluate(
       sampleMessage({
@@ -25,7 +25,7 @@ describe("ModerationSkipEvaluator", () => {
   });
 
   it("skips duplicate telegram message ids", async () => {
-    const dedupe = { tryClaim: vi.fn(async () => false) };
+    const dedupe = { tryClaim: vi.fn(() => false) };
     const evaluator = new ModerationSkipEvaluator(dedupe as never, mockAnalytics() as never, mockLogger() as never);
     const result = await evaluator.evaluate(sampleMessage({ telegramMessageId: 100 }));
     expect(result).toEqual({ skip: true });
@@ -33,7 +33,7 @@ describe("ModerationSkipEvaluator", () => {
   });
 
   it("allows unique inbound messages", async () => {
-    const dedupe = { tryClaim: vi.fn(async () => true) };
+    const dedupe = { tryClaim: vi.fn(() => true) };
     const evaluator = new ModerationSkipEvaluator(dedupe as never, mockAnalytics() as never, mockLogger() as never);
     await expect(evaluator.evaluate(sampleMessage({ telegramMessageId: 101 }))).resolves.toEqual({ skip: false });
   });

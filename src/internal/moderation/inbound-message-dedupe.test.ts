@@ -33,4 +33,12 @@ describe("InboundMessageDedupe", () => {
       expect(dedupe.tryClaim("chat-1", 7)).toBe(true);
     });
   });
+
+  it("trims entries when the cache exceeds maxKeys", () => {
+    const dedupe = new InboundMessageDedupe({ maxKeys: 2 });
+    expect(dedupe.tryClaim("chat-1", 1)).toBe(true);
+    expect(dedupe.tryClaim("chat-2", 2)).toBe(true);
+    expect(dedupe.tryClaim("chat-3", 3)).toBe(true);
+    expect(dedupe.tryClaim("chat-1", 1)).toBe(true);
+  });
 });
