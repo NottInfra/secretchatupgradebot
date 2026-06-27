@@ -55,15 +55,22 @@ export class ExecuteModerationActionUseCase {
 
     await this.unblockContact(client, input.senderId);
 
+    const blocked = await this.blockContact(client, input.senderId);
+    if (!blocked) return false;
+
     const sent = await this.sendBlockViaBusinessAutomation(
       input,
       body,
       businessConnectionId!,
       replyToMsgId
     );
-    if (!sent) return false;
-
-    return this.blockContact(client, input.senderId);
+    if (!sent) {
+      this.logger.error("failed_to_send_block_dm", {
+        senderId: input.senderId,
+        via: "business_automation"
+      });
+    }
+    return true;
   }
 
   private async sendBlockViaBusinessAutomation(
@@ -103,9 +110,9 @@ export class ExecuteModerationActionUseCase {
     try {
       await withSpan(moderationTracer, "moderation.unblock_contact", async () =>
         client.invoke({
-          _: "unblockMessageSender",
+          _: "setMessageSenderBlockList",
           sender_id: { _: "messageSenderUser", user_id: userId },
-          block_list: { _: "blockListMain" }
+          block_list: null
         })
       );
       this.logger.info("sender_unblocked_for_notice", { senderId });
@@ -134,7 +141,7 @@ export class ExecuteModerationActionUseCase {
     try {
       await withSpan(moderationTracer, "moderation.block_contact", async () =>
         client.invoke({
-          _: "blockMessageSender",
+          _: "setMessageSenderBlockList",
           sender_id: { _: "messageSenderUser", user_id: userId },
           block_list: { _: "blockListMain" }
         })

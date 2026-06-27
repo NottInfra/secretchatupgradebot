@@ -37,10 +37,13 @@ describe("ExecuteModerationActionUseCase", () => {
     expect(blocked).toBe(true);
     expect(notifications.sendBusinessHTMLReply).toHaveBeenCalledOnce();
     expect(invoke).toHaveBeenCalledWith(
-      expect.objectContaining({ _: "unblockMessageSender" })
+      expect.objectContaining({ _: "setMessageSenderBlockList", block_list: null })
     );
     expect(invoke).toHaveBeenCalledWith(
-      expect.objectContaining({ _: "blockMessageSender" })
+      expect.objectContaining({
+        _: "setMessageSenderBlockList",
+        block_list: { _: "blockListMain" }
+      })
     );
   });
 
@@ -54,7 +57,7 @@ describe("ExecuteModerationActionUseCase", () => {
     };
     const useCase = new ExecuteModerationActionUseCase(notifications as never, mockLogger() as never);
 
-    await useCase.execute(client as never, {
+    const blocked = await useCase.execute(client as never, {
       senderId: "1",
       decision: { action: "block", confidence: 1, reason: "test" },
       blockMessageHtml: "<b>Blocked</b>",
@@ -64,9 +67,35 @@ describe("ExecuteModerationActionUseCase", () => {
       })
     });
 
-    expect(notifications.sendBusinessHTMLReply).toHaveBeenCalledOnce();
+    expect(blocked).toBe(false);
+    expect(notifications.sendBusinessHTMLReply).not.toHaveBeenCalled();
     expect(client.invoke).not.toHaveBeenCalledWith(
-      expect.objectContaining({ _: "blockMessageSender" })
+      expect.objectContaining({ block_list: { _: "blockListMain" } })
     );
+  });
+
+  it("does not send block message when tdlib block fails", async () => {
+    const notifications = { sendBusinessHTMLReply: vi.fn(async () => true) };
+    const client = {
+      invoke: vi.fn(async (query: { _: string; block_list?: unknown }) => {
+        if (query._ === "getMe") return { id: 999 };
+        if (query.block_list) throw new Error("TDLib block failed");
+        return undefined;
+      })
+    };
+    const useCase = new ExecuteModerationActionUseCase(notifications as never, mockLogger() as never);
+
+    const blocked = await useCase.execute(client as never, {
+      senderId: "1",
+      decision: { action: "block", confidence: 1, reason: "test" },
+      blockMessageHtml: "<b>Blocked</b>",
+      moderationIncoming: sampleMessage({
+        source: "bot_api_automation",
+        businessConnectionId: "bc-1"
+      })
+    });
+
+    expect(blocked).toBe(false);
+    expect(notifications.sendBusinessHTMLReply).not.toHaveBeenCalled();
   });
 });
