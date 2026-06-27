@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/root.js",
     "dev": "NODE_ENV=development tsx watch src/root.ts",
-    "ops:create-db": "tsx src/zz-ops/create-db.ts",
+    "ops:create-db": "tsx scripts/create-db.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },

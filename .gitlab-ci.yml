@@ -61,10 +61,18 @@ sonar:
   script:
     - bash ./release/steps/sonar.sh test
 
+sentrux:
+  stage: sonar
+  tags: [self-hosted, test]
+  needs: [build, unit-test]
+  <<: *build_rules
+  script:
+    - bash ./release/steps/sentrux.sh test
+
 deploy:
   stage: deploy
   tags: [self-hosted, test]
-  needs: [build, trivy, sonar]
+  needs: [build, trivy, sonar, sentrux]
   <<: *build_rules
   script:
     - bash ./release/steps/deploy.sh test

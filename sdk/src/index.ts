@@ -47,6 +47,15 @@ export type OnboardAccountOptions = {
   pool?: boolean;
 };
 
+export type StartOnboardingParams = {
+  phone: string;
+  svcName?: string;
+  notifyTarget?: string;
+  pool?: boolean;
+  /** Clear stale TDLib files and run a fresh Telegram login for an existing account. */
+  forceReauth?: boolean;
+};
+
 const DEFAULT_WS_URL = "ws://localhost:3000";
 
 export type CreateServiceResult = ServiceView & {
@@ -60,7 +69,7 @@ type PendingRequest = {
   reject: (error: Error) => void;
 };
 
-function isAccessPending(value: unknown): value is AccessPending {
+export function isAccessPending(value: unknown): value is AccessPending {
   return Boolean(value && typeof value === "object" && "pending" in value);
 }
 
@@ -309,12 +318,6 @@ export class SessionProvider {
     };
   }
 
-  /** Accounts + sessions already registered under this service name (requires auth). */
-  async getService(name: string): Promise<ServiceView> {
-    await this.auth();
-    return this.request<ServiceView>("service.get", { svcName: name });
-  }
-
   async listServices(): Promise<string[]> {
     await this.auth();
     const payload = await this.request<{ services: string[] }>("service.list");
@@ -347,6 +350,22 @@ export class SessionProvider {
     return this.request<OnboardingStep>("onboard.submit", { onboardingId, kind, value });
   }
 
+  /** Start TDLib onboarding for a phone number (bot / service integration). */
+  async startOnboarding(params: StartOnboardingParams): Promise<OnboardingStep> {
+    await this.auth();
+    return this.request<OnboardingStep>("onboard.start", params);
+  }
+
+  /**
+   * Re-run Telegram login for an account whose persisted session is stale or unauthorized.
+   * Clears server-side TDLib files before starting a fresh auth flow.
+   */
+  async restartOnboarding(
+    params: Omit<StartOnboardingParams, "forceReauth">
+  ): Promise<OnboardingStep> {
+    return this.startOnboarding({ ...params, forceReauth: true });
+  }
+
   /** Interactive TDLib onboarding (ops / local CLI). Pool eligibility defaults to false. */
   async onboardAccount(
     prompter: OnboardPrompter,
@@ -356,11 +375,7 @@ export class SessionProvider {
     const pool = options.pool ?? this.options.pool ?? false;
     const done = await runOnboardingInteractive(
       prompter,
-      (phone) =>
-        this.request<OnboardingStep>("onboard.start", {
-          phone,
-          pool
-        }),
+      (phone) => this.startOnboarding({ phone, pool }),
       (onboardingId, kind, value) => this.submitOnboarding(onboardingId, kind, value)
     );
     return { accountId: done.accountId, sessionId: done.sessionId };
@@ -379,3 +394,6 @@ export class SessionProvider {
 export function createSessionProvider(options: SessionProviderOptions): SessionProvider {
   return new SessionProvider(options);
 }
+
+export { messageFromOwnerNotification } from "./owner-notification.js";
+export { isOnboardingStep } from "./onboard-interactive.js";

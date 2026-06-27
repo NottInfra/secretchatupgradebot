@@ -1,0 +1,95 @@
+[constraints]
+max_cycles = 0
+max_coupling = "A"
+max_cc = 25
+no_god_files = true
+
+[[boundaries]]
+from = "src/internal/moderation/repositories/*"
+to = "src/internal/lib/db/root.ts"
+reason = "Moderation repositories depend on IStore, not the Store implementation"
+
+[[boundaries]]
+from = "src/internal/session/repositories/*"
+to = "src/internal/lib/db/root.ts"
+reason = "Session repositories depend on IStore, not the Store implementation"
+
+[[boundaries]]
+from = "src/internal/app/controllers/*"
+to = "src/internal/lib/db/root.ts"
+reason = "Controllers must not reach the Store implementation"
+
+[[boundaries]]
+from = "src/internal/app/routes/*"
+to = "src/internal/lib/db/root.ts"
+reason = "Routes must not reach the Store implementation"
+
+[[boundaries]]
+from = "src/internal/app/use-cases/*"
+to = "src/internal/lib/db/root.ts"
+reason = "Use cases must use repositories, not Store directly"
+
+[[boundaries]]
+from = "src/internal/app/middleware/*"
+to = "src/internal/moderation/repositories/*"
+reason = "Middleware must depend on ports, not repository implementations"
+
+[[boundaries]]
+from = "src/internal/app/middleware/*"
+to = "src/internal/session/repositories/*"
+reason = "Middleware must depend on ports, not repository implementations"
+
+[[boundaries]]
+from = "src/internal/app/middleware/*"
+to = "src/internal/lib/db/root.ts"
+reason = "Middleware must not reach the Store implementation"
+
+[[boundaries]]
+from = "src/internal/app/controllers/*"
+to = "src/internal/app/use-cases/*"
+reason = "Controllers depend on ports, not use-case implementations"
+
+[[boundaries]]
+from = "src/internal/app/routes/*"
+to = "src/internal/app/use-cases/*"
+reason = "Routes depend on ports, not use-case implementations"
+
+[[boundaries]]
+from = "src/internal/moderation/*"
+to = "src/internal/app/controllers/*"
+reason = "Moderation domain must not depend on HTTP/Telegram controllers"
+
+[[boundaries]]
+from = "src/internal/session/*"
+to = "src/internal/app/controllers/*"
+reason = "Session domain must not depend on HTTP/Telegram controllers"
+
+[[boundaries]]
+from = "src/internal/session/*"
+to = "src/internal/moderation/*"
+reason = "Session wiring uses ports; domain code must not import moderation implementations"
+
+[[boundaries]]
+from = "src/internal/lib/telegram/*"
+to = "src/internal/moderation/*"
+reason = "Telegram lib is presentation/protocol only"
+
+[[boundaries]]
+from = "src/internal/lib/telegram/*"
+to = "src/internal/session/*"
+reason = "Telegram lib must not depend on session domain"
+
+[[boundaries]]
+from = "src/internal/lib/telegram/*"
+to = "src/internal/app/controllers/*"
+reason = "Telegram lib must not depend on HTTP layer"
+
+[[boundaries]]
+from = "src/internal/notifications/*"
+to = "src/internal/app/controllers/*"
+reason = "Notifications must not depend on HTTP/Telegram controllers"
+
+[[boundaries]]
+from = "src/internal/notifications/*"
+to = "src/internal/moderation/*"
+reason = "Notifications deliver messages; moderation rules live in moderation domain"

@@ -5,7 +5,7 @@ export type OnboardPrompter = {
   tell?: (message: string) => void;
 };
 
-function isOnboardingStep(value: unknown): value is OnboardingStep {
+export function isOnboardingStep(value: unknown): value is OnboardingStep {
   return Boolean(value && typeof value === "object" && "step" in value);
 }
 
